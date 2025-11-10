@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FilePeek AI - Logo Kitaplığı</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    h1 {
+      text-align: center;
+      color: white;
+      margin-bottom: 40px;
+      font-size: 42px;
+      text-shadow: 0 2px 20px rgba(0,0,0,0.2);
+    }
+    
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 30px;
+      margin-bottom: 30px;
+    }
+    
+    .card {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 50px rgba(0,0,0,0.15);
+    }
+    
+    .card h2 {
+      color: #1E293B;
+      margin-bottom: 10px;
+      font-size: 20px;
+    }
+    
+    .card p {
+      color: #64748B;
+      font-size: 14px;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    
+    .logo-container {
+      width: 100%;
+      min-height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    
+    .white-bg { background: #ffffff; }
+    .dark-bg { background: #1E293B; }
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .light-bg { background: #F1F5F9; }
+    
+    /* Logo Styles */
+    .logo-icon {
+      position: relative;
+      display: inline-block;
+    }
+    
+    .document {
+      width: 80px;
+      height: 100px;
+      background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+      border-radius: 8px;
+      position: relative;
+      box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+    }
+    
+    .document::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 25px;
+      height: 25px;
+      background: #1E40AF;
+      clip-path: polygon(100% 0, 100% 100%, 0 0);
+    }
+    
+    .doc-lines {
+      position: absolute;
+      top: 25px;
+      left: 10px;
+      right: 10px;
+    }
+    
+    .doc-line {
+      height: 3px;
+      background: rgba(255, 255, 255, 0.4);
+      border-radius: 2px;
+      margin-bottom: 10px;
+    }
+    
+    .eye {
+      position: absolute;
+      top: 50%;
+      right: -20px;
+      transform: translateY(-50%);
+      width: 70px;
+      height: 45px;
+      background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4);
+    }
+    
+    .eye-white {
+      width: 60px;
+      height: 38px;
+      background: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .iris {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+      border-radius: 50%;
+      position: relative;
+    }
+    
+    .pupil {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 12px;
+      height: 12px;
+      background: #1E293B;
+      border-radius: 50%;
+    }
+    
+    .shine {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      width: 6px;
+      height: 6px;
+      background: white;
+      border-radius: 50%;
+    }
+    
+    .logo-text {
+      font-size: 36px;
+      font-weight: 700;
+      color: #1E293B;
+      letter-spacing: 1px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .logo-text.white {
+      color: white;
+    }
+    
+    .ai-badge {
+      background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+      color: white;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    
+    .slogan {
+      font-size: 14px;
+      color: #64748B;
+      margin-top: 8px;
+      letter-spacing: 0.5px;
+    }
+    
+    .slogan.white {
+      color: rgba(255, 255, 255, 0.8);
+    }
+    
+    .icon-only {
+      transform: scale(1.2);
+    }
+    
+    .horizontal-layout {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    
+    .minimal-logo {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    
+    .minimal-icon {
+      width: 50px;
+      height: 50px;
+      background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .minimal-icon::before {
+      content: '👁️';
+      font-size: 28px;
+    }
+    
+    .download-btn {
+      background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+    
+    .download-btn:hover {
+      transform: scale(1.05);
+    }
+    
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      
+      h1 {
+        font-size: 28px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 FilePeek AI - Logo Kitaplığı</h1>
+    
+    <div class="grid">
+      <!-- Version 1: Full Logo -->
+      <div class="card">
+        <h2>🎯 Ana Logo (Tam Versiyon)</h2>
+        <p>Landing page, app açılış ekranı, sunumlar için</p>
+        <div class="logo-container white-bg">
+          <div style="text-align: center;">
+            <div class="horizontal-layout">
+              <div class="logo-icon">
+                <div class="document">
+                  <div class="doc-lines">
+                    <div class="doc-line" style="width: 50px;"></div>
+                    <div class="doc-line" style="width: 60px;"></div>
+                    <div class="doc-line" style="width: 55px;"></div>
+                  </div>
+                </div>
+                <div class="eye">
+                  <div class="eye-white">
+                    <div class="iris">
+                      <div class="pupil"></div>
+                      <div class="shine"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top: 30px;">
+              <div class="logo-text">
+                FilePeek <span class="ai-badge">AI</span>
+              </div>
+              <div class="slogan">See inside, instantly</div>
+            </div>
+          </div>
+        </div>
+        <button class="download-btn">SVG İndir</button>
+      </div>
+      
+      <!-- Version 2: Dark Background -->
+      <div class="card">
+        <h2>🌙 Karanlık Tema</h2>
+        <p>Dark mode, gece ekranı, karanlık arkaplanlar için</p>
+        <div class="logo-container dark-bg">
+          <div style="text-align: center;">
+            <div class="horizontal-layout">
+              <div class="logo-icon">
+                <div class="document">
+                  <div class="doc-lines">
+                    <div class="doc-line" style="width: 50px;"></div>
+                    <div class="doc-line" style="width: 60px;"></div>
+                    <div class="doc-line" style="width: 55px;"></div>
+                  </div>
+                </div>
+                <div class="eye">
+                  <div class="eye-white">
+                    <div class="iris">
+                      <div class="pupil"></div>
+                      <div class="shine"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top: 30px;">
+              <div class="logo-text white">
+                FilePeek <span class="ai-badge">AI</span>
+              </div>
+              <div class="slogan white">See inside, instantly</div>
+            </div>
+          </div>
+        </div>
+        <button class="download-btn">PNG İndir</button>
+      </div>
+      
+      <!-- Version 3: Icon Only -->
+      <div class="card">
+        <h2>⚡ Sadece İkon</h2>
+        <p>App ikonu, favicon, sosyal medya profil resmi</p>
+        <div class="logo-container light-bg">
+          <div class="logo-icon icon-only">
+            <div class="document" style="transform: scale(1.3);">
+              <div class="doc-lines">
+                <div class="doc-line" style="width: 50px;"></div>
+                <div class="doc-line" style="width: 60px;"></div>
+                <div class="doc-line" style="width: 55px;"></div>
+              </div>
+            </div>
+            <div class="eye" style="transform: translateY(-50%) scale(1.1);">
+              <div class="eye-white">
+                <div class="iris">
+                  <div class="pupil"></div>
+                  <div class="shine"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="download-btn">1024x1024 İndir</button>
+      </div>
+      
+      <!-- Version 4: Horizontal -->
+      <div class="card">
+        <h2>↔️ Yatay Düzen</h2>
+        <p>Üst menü bar, email imzası, header için</p>
+        <div class="logo-container white-bg">
+          <div class="horizontal-layout">
+            <div class="logo-icon" style="transform: scale(0.8);">
+              <div class="document">
+                <div class="doc-lines">
+                  <div class="doc-line" style="width: 50px;"></div>
+                  <div class="doc-line" style="width: 60px;"></div>
+                  <div class="doc-line" style="width: 55px;"></div>
+                </div>
+              </div>
+              <div class="eye">
+                <div class="eye-white">
+                  <div class="iris">
+                    <div class="pupil"></div>
+                    <div class="shine"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="logo-text" style="font-size: 28px;">
+                FilePeek <span class="ai-badge">AI</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="download-btn">SVG İndir</button>
+      </div>
+      
+      <!-- Version 5: Minimal -->
+      <div class="card">
+        <h2>✨ Minimal Versiyon</h2>
+        <p>Küçük alanlar, mobil menü, kompakt görünüm</p>
+        <div class="logo-container white-bg">
+          <div class="minimal-logo">
+            <div class="minimal-icon"></div>
+            <div class="logo-text" style="font-size: 24px;">
+              FilePeek <span class="ai-badge" style="font-size: 12px; padding: 3px 8px;">AI</span>
+            </div>
+          </div>
+        </div>
+        <button class="download-btn">SVG İndir</button>
+      </div>
+      
+      <!-- Version 6: Gradient Background -->
+      <div class="card">
+        <h2>🌈 Gradient Arka Plan</h2>
+        <p>Hero section, splash screen, marketing materyali</p>
+        <div class="logo-container gradient-bg">
+          <div style="text-align: center;">
+            <div class="horizontal-layout">
+              <div class="logo-icon">
+                <div class="document" style="box-shadow: 0 8px 30px rgba(0,0,0,0.3);">
+                  <div class="doc-lines">
+                    <div class="doc-line" style="width: 50px;"></div>
+                    <div class="doc-line" style="width: 60px;"></div>
+                    <div class="doc-line" style="width: 55px;"></div>
+                  </div>
+                </div>
+                <div class="eye" style="box-shadow: 0 8px 30px rgba(0,0,0,0.3);">
+                  <div class="eye-white">
+                    <div class="iris">
+                      <div class="pupil"></div>
+                      <div class="shine"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top: 30px;">
+              <div class="logo-text white">
+                FilePeek <span class="ai-badge">AI</span>
+              </div>
+              <div class="slogan white">See inside, instantly</div>
+            </div>
+          </div>
+        </div>
+        <button class="download-btn">PNG İndir</button>
+      </div>
+    </div>
+    
+    <div style="text-align: center; color: white; margin-top: 40px; font-size: 14px; opacity: 0.8;">
+      <p>💡 Tüm versiyonlar SVG, PNG ve ICO formatlarında indirilebilir</p>
+      <p style="margin-top: 10px;">📏 Boyutlar: 512x512, 1024x1024, 2048x2048 (yüksek çözünürlük)</p>
+    </div>
+  </div>
+</body>
+</html>
+

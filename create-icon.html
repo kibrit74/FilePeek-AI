@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FilePeek AI - İkon Oluşturucu</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      max-width: 600px;
+    }
+    
+    h1 {
+      color: #1E293B;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+    
+    p {
+      color: #64748B;
+      margin-bottom: 30px;
+    }
+    
+    canvas {
+      border: 2px solid #E2E8F0;
+      border-radius: 12px;
+      margin: 20px 0;
+      display: none;
+    }
+    
+    .preview {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin: 30px 0;
+      flex-wrap: wrap;
+    }
+    
+    .preview-item {
+      text-align: center;
+    }
+    
+    .preview-item canvas {
+      display: block;
+      border: 2px solid #E2E8F0;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .preview-item p {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #64748B;
+    }
+    
+    .btn {
+      background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+      margin: 10px;
+      font-size: 16px;
+    }
+    
+    .btn:hover {
+      transform: scale(1.05);
+    }
+    
+    .success {
+      background: #10B981;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      margin-top: 20px;
+      display: none;
+    }
+    
+    .instructions {
+      background: #F1F5F9;
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 30px;
+      text-align: left;
+    }
+    
+    .instructions h3 {
+      color: #1E293B;
+      margin-bottom: 12px;
+      font-size: 18px;
+    }
+    
+    .instructions ol {
+      margin-left: 20px;
+      color: #64748B;
+      line-height: 1.8;
+    }
+    
+    .instructions code {
+      background: #E2E8F0;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      color: #3B82F6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎨 FilePeek AI İkon Oluşturucu</h1>
+    <p>Electron uygulamanız için ikon dosyalarını oluşturun</p>
+    
+    <div class="preview" id="preview"></div>
+    
+    <button class="btn" onclick="downloadAll()">📥 Tüm İkonları İndir</button>
+    
+    <div class="success" id="success">✅ İkonlar indirildi!</div>
+    
+    <div class="instructions">
+      <h3>📋 Kurulum Adımları:</h3>
+      <ol>
+        <li>"Tüm İkonları İndir" butonuna tıklayın</li>
+        <li>İndirilen dosyaları <code>kankaai/build/</code> klasörüne kopyalayın:
+          <ul style="margin-top: 8px;">
+            <li><code>icon.png</code> (1024x1024)</li>
+            <li><code>icon.ico</code> için icon-256.png'yi kullanın</li>
+          </ul>
+        </li>
+        <li>Terminalde: <code>cd kankaai && npm run build</code></li>
+        <li>Artık uygulamanız kendi ikonuyla açılacak! 🎉</li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    const sizes = [
+      { size: 1024, name: 'icon' },
+      { size: 512, name: 'icon-512' },
+      { size: 256, name: 'icon-256' },
+      { size: 128, name: 'icon-128' },
+      { size: 64, name: 'icon-64' },
+      { size: 32, name: 'icon-32' }
+    ];
+    
+    function drawIcon(canvas, size) {
+      const ctx = canvas.getContext('2d');
+      canvas.width = size;
+      canvas.height = size;
+      
+      // Arka plan (gradient)
+      const gradient = ctx.createLinearGradient(0, 0, size, size);
+      gradient.addColorStop(0, '#3B82F6');
+      gradient.addColorStop(1, '#8B5CF6');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+      
+      // Belge (dokuman) şekli
+      const docWidth = size * 0.35;
+      const docHeight = size * 0.45;
+      const docX = size * 0.25;
+      const docY = size * 0.275;
+      const cornerSize = size * 0.08;
+      
+      // Belge gölgesi
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      ctx.shadowBlur = size * 0.02;
+      ctx.shadowOffsetX = size * 0.01;
+      ctx.shadowOffsetY = size * 0.01;
+      
+      // Belge ana şekil
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.moveTo(docX, docY);
+      ctx.lineTo(docX + docWidth - cornerSize, docY);
+      ctx.lineTo(docX + docWidth, docY + cornerSize);
+      ctx.lineTo(docX + docWidth, docY + docHeight);
+      ctx.lineTo(docX, docY + docHeight);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Sağ üst köşe kıvrımı
+      ctx.fillStyle = '#E5E7EB';
+      ctx.beginPath();
+      ctx.moveTo(docX + docWidth - cornerSize, docY);
+      ctx.lineTo(docX + docWidth, docY + cornerSize);
+      ctx.lineTo(docX + docWidth - cornerSize, docY + cornerSize);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.shadowColor = 'transparent';
+      
+      // Belge üzerindeki çizgiler
+      const lineY = docY + docHeight * 0.3;
+      const lineSpacing = size * 0.06;
+      ctx.strokeStyle = '#3B82F6';
+      ctx.lineWidth = size * 0.012;
+      ctx.lineCap = 'round';
+      
+      for (let i = 0; i < 3; i++) {
+        const y = lineY + (i * lineSpacing);
+        const lineWidth = docWidth * (0.6 + Math.random() * 0.2);
+        ctx.beginPath();
+        ctx.moveTo(docX + docWidth * 0.15, y);
+        ctx.lineTo(docX + docWidth * 0.15 + lineWidth, y);
+        ctx.stroke();
+      }
+      
+      // Göz şekli
+      const eyeX = size * 0.6;
+      const eyeY = size * 0.5;
+      const eyeWidth = size * 0.25;
+      const eyeHeight = size * 0.16;
+      
+      // Göz dış şekil (gradient)
+      const eyeGradient = ctx.createLinearGradient(eyeX - eyeWidth/2, eyeY - eyeHeight/2, eyeX + eyeWidth/2, eyeY + eyeHeight/2);
+      eyeGradient.addColorStop(0, '#8B5CF6');
+      eyeGradient.addColorStop(1, '#6366F1');
+      
+      ctx.fillStyle = eyeGradient;
+      ctx.shadowColor = 'rgba(139, 92, 246, 0.5)';
+      ctx.shadowBlur = size * 0.03;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = size * 0.01;
+      
+      ctx.beginPath();
+      ctx.ellipse(eyeX, eyeY, eyeWidth / 2, eyeHeight / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.shadowColor = 'transparent';
+      
+      // Göz beyazı
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.ellipse(eyeX, eyeY, eyeWidth / 2.3, eyeHeight / 2.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // İris
+      const irisSize = size * 0.055;
+      const irisGradient = ctx.createRadialGradient(eyeX, eyeY, 0, eyeX, eyeY, irisSize);
+      irisGradient.addColorStop(0, '#8B5CF6');
+      irisGradient.addColorStop(1, '#6366F1');
+      
+      ctx.fillStyle = irisGradient;
+      ctx.beginPath();
+      ctx.arc(eyeX, eyeY, irisSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Pupil (göz bebeği)
+      ctx.fillStyle = '#1E293B';
+      ctx.beginPath();
+      ctx.arc(eyeX, eyeY, irisSize * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Göz parıltısı
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(eyeX - irisSize * 0.3, eyeY - irisSize * 0.3, irisSize * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Önizlemeleri oluştur
+    const preview = document.getElementById('preview');
+    sizes.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'preview-item';
+      
+      const canvas = document.createElement('canvas');
+      drawIcon(canvas, item.size);
+      
+      const p = document.createElement('p');
+      p.textContent = `${item.size}x${item.size}`;
+      
+      div.appendChild(canvas);
+      div.appendChild(p);
+      preview.appendChild(div);
+    });
+    
+    function downloadAll() {
+      sizes.forEach((item, index) => {
+        setTimeout(() => {
+          const canvas = document.createElement('canvas');
+          drawIcon(canvas, item.size);
+          
+          canvas.toBlob(blob => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${item.name}.png`;
+            a.click();
+            URL.revokeObjectURL(url);
+          });
+        }, index * 200);
+      });
+      
+      document.getElementById('success').style.display = 'block';
+      setTimeout(() => {
+        document.getElementById('success').style.display = 'none';
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
+
+

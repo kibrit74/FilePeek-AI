@@ -1,0 +1,103 @@
+Windows Registry Editor Version 5.00
+
+; KankaAI - PDF için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.pdf\shell\KankaAI]
+@="KankaAI ile Aç"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.pdf\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - DOCX için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.docx\shell\KankaAI]
+@="KankaAI ile Aç"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.docx\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - XLSX için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.xlsx\shell\KankaAI]
+@="KankaAI ile Aç"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.xlsx\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - TXT için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.txt\shell\KankaAI]
+@="KankaAI ile Aç"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.txt\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - ZIP için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.zip\shell\KankaAI]
+@="KankaAI ile Aç"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.zip\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - UDF için sağ tık menüsü (Hukuk belgeleri)
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.udf\shell\KankaAI]
+@="KankaAI ile Aç"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.udf\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - JPG için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.jpg\shell\KankaAI]
+@="KankaAI ile Görüntüle"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.jpg\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - JPEG için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.jpeg\shell\KankaAI]
+@="KankaAI ile Görüntüle"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.jpeg\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - PNG için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.png\shell\KankaAI]
+@="KankaAI ile Görüntüle"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.png\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - GIF için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.gif\shell\KankaAI]
+@="KankaAI ile Görüntüle"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.gif\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - WEBP için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.webp\shell\KankaAI]
+@="KankaAI ile Görüntüle"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.webp\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+; KankaAI - BMP için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.bmp\shell\KankaAI]
+@="KankaAI ile Görüntüle"
+"Icon"="C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\build\\icon.ico"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.bmp\shell\KankaAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\electron\\electron.exe\" \"C:\\Users\\Obuzhukuk\\Desktop\\acmadangor\\kankaai\\src\\main.js\" \"%1\""
+
+
+
+
+
+

@@ -1,0 +1,117 @@
+{
+  "name": "filepeek-ai",
+  "version": "1.0.0",
+  "description": "AI-powered file preview and analysis - See inside, instantly",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev:electron": "start landing-page.html && electron .",
+    "build": "electron-builder",
+    "dist": "electron-builder --win --x64",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "keywords": [
+    "electron",
+    "ai",
+    "file-preview",
+    "gemini",
+    "document-analysis"
+  ],
+  "author": "FilePeek AI Team",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "jszip": "^3.10.0",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^3.11.174",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.0"
+  },
+  "build": {
+    "appId": "com.filepeek.ai",
+    "productName": "FilePeek AI",
+    "files": [
+      "src/**/*",
+      "package.json",
+      ".env"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "PDF Document",
+        "role": "Viewer"
+      },
+      {
+        "ext": "docx",
+        "name": "Word Document",
+        "role": "Viewer"
+      },
+      {
+        "ext": "xlsx",
+        "name": "Excel Workbook",
+        "role": "Viewer"
+      },
+      {
+        "ext": "txt",
+        "name": "Text File",
+        "role": "Viewer"
+      },
+      {
+        "ext": "zip",
+        "name": "ZIP Archive",
+        "role": "Viewer"
+      },
+      {
+        "ext": "jpg",
+        "name": "JPEG Image",
+        "role": "Viewer"
+      },
+      {
+        "ext": "jpeg",
+        "name": "JPEG Image",
+        "role": "Viewer"
+      },
+      {
+        "ext": "png",
+        "name": "PNG Image",
+        "role": "Viewer"
+      },
+      {
+        "ext": "gif",
+        "name": "GIF Image",
+        "role": "Viewer"
+      },
+      {
+        "ext": "webp",
+        "name": "WebP Image",
+        "role": "Viewer"
+      },
+      {
+        "ext": "bmp",
+        "name": "BMP Image",
+        "role": "Viewer"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "icon": "build/icon.png"
+    }
+  }
+}
