@@ -1,17 +1,42 @@
-// PDF.js Kütüphanesi
-let pdfjsLib;
-const pdfjsLibReady = (async () => {
-  const module = await import('../../node_modules/pdfjs-dist/build/pdf.mjs');
-  module.GlobalWorkerOptions.workerSrc = '../../node_modules/pdfjs-dist/build/pdf.worker.mjs';
-  pdfjsLib = module;
-  return module;
-})();
+// PDF.js Kütüphanesi - require ile yükle (Electron uyumlu)
+const pdfjsLib = window.pdfjsLib || null;
+
+// PDF.js'i yükle
+if (typeof window !== 'undefined' && !window.pdfjsLib) {
+  const script = document.createElement('script');
+  script.src = '../../node_modules/pdfjs-dist/build/pdf.min.js';
+  script.onload = () => {
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = '../../node_modules/pdfjs-dist/build/pdf.worker.min.js';
+      console.log('✅ PDF.js yüklendi');
+    }
+  };
+  document.head.appendChild(script);
+}
 
 // PDF ilk sayfayı render et
 async function renderPDFFirstPage(pdfBase64) {
   try {
-    if (!pdfjsLib) {
-      await pdfjsLibReady;
+    // PDF.js yüklenene kadar bekle
+    if (!window.pdfjsLib) {
+      await new Promise(resolve => {
+        const checkInterval = setInterval(() => {
+          if (window.pdfjsLib) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+        // Maksimum 5 saniye bekle
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          resolve();
+        }, 5000);
+      });
+    }
+    
+    if (!window.pdfjsLib) {
+      console.error('PDF.js yüklenemedi');
+      return null;
     }
     
     const pdfData = atob(pdfBase64);
@@ -20,7 +45,7 @@ async function renderPDFFirstPage(pdfBase64) {
       pdfArray[i] = pdfData.charCodeAt(i);
     }
     
-    const loadingTask = pdfjsLib.getDocument({ data: pdfArray });
+    const loadingTask = window.pdfjsLib.getDocument({ data: pdfArray });
     const pdf = await loadingTask.promise;
     const page = await pdf.getPage(1);
     
@@ -335,6 +360,9 @@ async function loadFile(filePath, autoAnalyze = false) {
     displayFile(data);
     hideLoading();
     
+    // Düzenle butonlarını güncelle
+    updateEditorButtons();
+    
     // Resimse ve autoAnalyze aktifse otomatik analiz başlat
     if (autoAnalyze && data.type === "image") {
       setTimeout(() => {
@@ -500,9 +528,11 @@ function displayFile(data, keepAIResult = false) {
             <div class="preview-meta">
               <h3>Excel Tablosu</h3>
               <div class="preview-stats">
-                <span class="stat-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg> ${data.sheets.join(", ")}</span>
-                <span class="stat-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg> ${xlsxSizeMB} MB</span>
+                <span class="stat-badge">📊 ${data.totalSheets || data.sheets.length} Sayfa</span>
+                <span class="stat-badge">📋 ${data.totalRows || '?'} Satır</span>
+                <span class="stat-badge">💾 ${xlsxSizeMB} MB</span>
               </div>
+              <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Sayfalar: ${data.sheets.join(", ")}</p>
             </div>
           </div>
           <div class="preview-content">
@@ -664,11 +694,18 @@ summaryBtn.addEventListener("click", async () => {
   } 
   // Metin/belge ise özetle
   else {
-    showLoading("AI ile özetleniyor...");
+    // Excel için özel mesaj
+    const isExcel = currentFileData.type === "xlsx";
+    const loadingMsg = isExcel 
+      ? `AI ile analiz ediliyor (${currentFileData.totalSheets || 1} sayfa, ${currentFileData.totalRows || '?'} satır)...`
+      : "AI ile özetleniyor (1. sayfa)...";
+    
+    showLoading(loadingMsg);
     aiResult.classList.add("hidden");
     
     try {
-      const text = currentFileData.fullText || currentFileData.sample || "";
+      // SADECE ÖNIZLEME için sample kullan (Excel'de her sayfadan örnek)
+      const text = currentFileData.sample || "";
       if (!text || text.trim().length === 0) {
         showError("Özetlenecek metin bulunamadı!");
         hideLoading();
@@ -677,7 +714,8 @@ summaryBtn.addEventListener("click", async () => {
       const result = await window.kankaAPI.aiSummary(text);
       
       if (result.success) {
-        showAIResult("📝 Özet", result.summary);
+        const title = isExcel ? "📊 Excel Özeti (Tüm Sayfalar)" : "📝 İlk Sayfa Özeti";
+        showAIResult(title, result.summary);
       } else {
         showError(result.error);
       }
@@ -694,7 +732,13 @@ askBtn.addEventListener("click", async () => {
   const question = questionInput.value.trim();
   if (!question || !currentFileData) return;
   
-  showLoading("AI cevap hazırlıyor...");
+  // Excel için özel loading mesajı
+  const isExcel = currentFileData.type === "xlsx";
+  const loadingMsg = isExcel 
+    ? `AI tüm sayfaları tarıyor (${currentFileData.totalSheets || 1} sayfa, ${currentFileData.totalRows || '?'} satır)...`
+    : "AI cevap hazırlıyor...";
+  
+  showLoading(loadingMsg);
   aiResult.classList.add("hidden");
   
   try {
@@ -711,6 +755,7 @@ askBtn.addEventListener("click", async () => {
     } 
     // Metin/belge ise normal soru-cevap
     else {
+      // TÜM DOSYAYI ANALİZ ET - fullText kullan
       const text = currentFileData.fullText || currentFileData.sample || "";
       if (!text || text.trim().length === 0) {
         showError("Soru sorulacak metin bulunamadı!");
@@ -804,6 +849,14 @@ function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text;
   return div.innerHTML;
+}
+
+function escapeAttribute(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 // Çeviri butonu
@@ -1150,5 +1203,646 @@ reloadFileBtn.addEventListener("click", () => {
   }
 });
 
+// ===== WORD & EXCEL EDITOR =====
+
+// Modal elementleri
+const wordEditorModal = document.getElementById("wordEditorModal");
+const excelEditorModal = document.getElementById("excelEditorModal");
+const wordEditorContent = document.getElementById("wordEditorContent");
+const excelEditorContent = document.getElementById("excelEditorContent");
+
+// Butonlar
+const editWordBtn = document.getElementById("editWordBtn");
+const editExcelBtn = document.getElementById("editExcelBtn");
+const closeWordEditor = document.getElementById("closeWordEditor");
+const closeExcelEditor = document.getElementById("closeExcelEditor");
+const saveWordBtn = document.getElementById("saveWordBtn");
+const saveWordAsBtn = document.getElementById("saveWordAsBtn");
+const cancelWordBtn = document.getElementById("cancelWordBtn");
+const saveExcelBtn = document.getElementById("saveExcelBtn");
+const saveExcelAsBtn = document.getElementById("saveExcelAsBtn");
+const cancelExcelBtn = document.getElementById("cancelExcelBtn");
+
+// Word toolbar butonları
+const boldBtn = document.getElementById("boldBtn");
+const italicBtn = document.getElementById("italicBtn");
+const underlineBtn = document.getElementById("underlineBtn");
+const headingSelect = document.getElementById("headingSelect");
+const listBtn = document.getElementById("listBtn");
+
+// Excel toolbar butonları
+const addRowBtn = document.getElementById("addRowBtn");
+const addColBtn = document.getElementById("addColBtn");
+const deleteRowBtn = document.getElementById("deleteRowBtn");
+const deleteColBtn = document.getElementById("deleteColBtn");
+const cellInfo = document.getElementById("cellInfo");
+
+// Excel biçimlendirme butonları
+const boldCellBtn = document.getElementById("boldCellBtn");
+const italicCellBtn = document.getElementById("italicCellBtn");
+const underlineCellBtn = document.getElementById("underlineCellBtn");
+const alignLeftBtn = document.getElementById("alignLeftBtn");
+const alignCenterBtn = document.getElementById("alignCenterBtn");
+const alignRightBtn = document.getElementById("alignRightBtn");
+const bgColorPicker = document.getElementById("bgColorPicker");
+const textColorPicker = document.getElementById("textColorPicker");
+
+// Formül çubuğu
+const formulaInput = document.getElementById("formulaInput");
+const formulaCellName = document.getElementById("formulaCellName");
+
+let currentEditingFile = null;
+let excelData = []; // Şimdi {value, style} objesi içerecek
+let selectedCell = null;
+let selectedRow = null;
+let selectedColumn = null;
+
+function getSelectionCells() {
+  if (selectedRow !== null) {
+    return excelData[selectedRow] || [];
+  }
+  if (selectedColumn !== null) {
+    return excelData.map(row => row[selectedColumn]).filter(Boolean);
+  }
+  if (selectedCell) {
+    return [excelData[selectedCell.row]?.[selectedCell.col]].filter(Boolean);
+  }
+  return [];
+}
+
+function toggleStyleOnSelection(key) {
+  const cells = getSelectionCells();
+  if (!cells.length) return;
+  const current = !!cells[0].style[key];
+  cells.forEach(cell => {
+    cell.style[key] = !current;
+  });
+  renderExcelTable();
+}
+
+function setAlignOnSelection(value) {
+  const cells = getSelectionCells();
+  if (!cells.length) return;
+  cells.forEach(cell => {
+    cell.style.align = value;
+  });
+  renderExcelTable();
+}
+
+function setColorOnSelection(key, value) {
+  const cells = getSelectionCells();
+  if (!cells.length) return;
+  cells.forEach(cell => {
+    cell.style[key] = value;
+  });
+  renderExcelTable();
+}
+
+// Word düzenle butonu
+editWordBtn.addEventListener("click", () => {
+  if (!currentFileData || currentFileData.type !== "docx") return;
+  
+  wordEditorModal.classList.remove("hidden");
+  
+  // Metni temizle ve düzgün paragraflar halinde göster
+  let text = currentFileData.fullText || currentFileData.sample || "";
+  
+  // Satır sonlarını paragraf sonlarına çevir
+  text = text.replace(/\r\n/g, '\n');
+  text = text.replace(/\r/g, '\n');
+  
+  // Boş satırları paragraf ayırıcısı olarak kullan
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  
+  // Her paragrafı <p> etiketi içine al
+  let html = '';
+  paragraphs.forEach(para => {
+    const cleanPara = para.trim().replace(/\n/g, '<br>');
+    html += `<p>${cleanPara}</p>`;
+  });
+  
+  wordEditorContent.innerHTML = html || "<p>Metin bulunamadı...</p>";
+  currentEditingFile = currentFileData.fullPath || null;
+});
+
+// Excel düzenle butonu
+editExcelBtn.addEventListener("click", () => {
+  console.log("Excel düzenle butonu tıklandı");
+  console.log("currentFileData:", currentFileData);
+  
+  if (!currentFileData || currentFileData.type !== "xlsx") {
+    console.error("Excel dosyası değil!");
+    return;
+  }
+  
+  excelEditorModal.classList.remove("hidden");
+  currentEditingFile = currentFileData.fullPath || null;
+  
+  // Excel verilerini yükle (değer + stil)
+  if (currentFileData.rows && currentFileData.rows.length > 0) {
+    console.log("Mevcut Excel verileri yükleniyor:", currentFileData.rows.length, "satır");
+    excelData = currentFileData.rows.map(row => 
+      row.map(value => ({
+        value: value || "",
+        style: {
+          bold: false,
+          italic: false,
+          underline: false,
+          align: "left",
+          bgColor: "#ffffff",
+          textColor: "#000000"
+        }
+      }))
+    );
+  } else {
+    // Boş tablo oluştur
+    console.log("Boş tablo oluşturuluyor");
+    excelData = Array(10).fill(null).map(() => 
+      Array(10).fill(null).map(() => ({
+        value: "",
+        style: {
+          bold: false,
+          italic: false,
+          underline: false,
+          align: "left",
+          bgColor: "#ffffff",
+          textColor: "#000000"
+        }
+      }))
+    );
+  }
+  
+  console.log("excelData hazır:", excelData);
+  selectedCell = { row: 0, col: 0 };
+  
+  try {
+    renderExcelTable();
+    console.log("Tablo render edildi");
+  } catch (error) {
+    console.error("Tablo render hatası:", error);
+  }
+});
+
+// Word toolbar işlevleri
+boldBtn.addEventListener("click", () => {
+  document.execCommand("bold", false, null);
+  wordEditorContent.focus();
+});
+
+italicBtn.addEventListener("click", () => {
+  document.execCommand("italic", false, null);
+  wordEditorContent.focus();
+});
+
+underlineBtn.addEventListener("click", () => {
+  document.execCommand("underline", false, null);
+  wordEditorContent.focus();
+});
+
+headingSelect.addEventListener("change", (e) => {
+  const value = e.target.value;
+  if (value === "p") {
+    document.execCommand("formatBlock", false, "<p>");
+  } else {
+    document.execCommand("formatBlock", false, `<${value}>`);
+  }
+  wordEditorContent.focus();
+});
+
+listBtn.addEventListener("click", () => {
+  document.execCommand("insertUnorderedList", false, null);
+  wordEditorContent.focus();
+});
+
+// Excel tablo oluştur (gelişmiş - stil desteğiyle)
+function renderExcelTable() {
+  if (!excelData || excelData.length === 0) {
+    console.error("Excel verisi boş!");
+    return;
+  }
+  
+  const rows = excelData.length;
+  const cols = excelData[0]?.length || 10;
+  
+  let html = '<table class="excel-table">';
+  
+  // Başlık satırı (A, B, C, ...)
+  html += '<thead><tr><th></th>';
+  for (let c = 0; c < cols; c++) {
+    html += `<th class="col-header" data-col="${c}">${String.fromCharCode(65 + c)}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+  
+  // Veri satırları
+  for (let r = 0; r < rows; r++) {
+    html += `<tr><th class="row-header" data-row="${r}">${r + 1}</th>`;
+    for (let c = 0; c < cols; c++) {
+      let cell = excelData[r][c];
+      
+      // Hücre yoksa veya düzgün formatlanmamışsa default oluştur
+      if (!cell || typeof cell !== 'object') {
+        cell = {
+          value: typeof cell === 'string' ? cell : "",
+          style: {
+            bold: false, italic: false, underline: false,
+            align: "left", bgColor: "#ffffff", textColor: "#000000"
+          }
+        };
+        excelData[r][c] = cell;
+      }
+      
+      const rawValue = cell.value ?? "";
+      const computedValue = (rawValue && rawValue.toString().startsWith('=')) ? evaluateFormula(rawValue.toString(), r, c) : rawValue;
+      const displayValue = computedValue ?? "";
+      const safeValue = escapeAttribute(displayValue);
+      
+      const style = `
+        background-color: ${cell.style?.bgColor || '#ffffff'};
+        color: ${cell.style?.textColor || '#000000'};
+        font-weight: ${cell.style?.bold ? 'bold' : 'normal'};
+        font-style: ${cell.style?.italic ? 'italic' : 'normal'};
+        text-decoration: ${cell.style?.underline ? 'underline' : 'none'};
+        text-align: ${cell.style?.align || 'left'};
+      `;
+      
+      html += `<td data-row="${r}" data-col="${c}" style="${style}">
+        <input type="text" value="${safeValue}" data-row="${r}" data-col="${c}" style="${style}" />
+      </td>`;
+    }
+    html += '</tr>';
+  }
+  
+  html += '</tbody></table>';
+  excelEditorContent.innerHTML = html;
+  
+  // Input değişikliklerini dinle
+  const inputs = excelEditorContent.querySelectorAll("input");
+  inputs.forEach(input => {
+    input.addEventListener("input", (e) => {
+      const row = parseInt(e.target.dataset.row);
+      const col = parseInt(e.target.dataset.col);
+      excelData[row][col].value = e.target.value;
+      updateFormulaBar();
+    });
+    
+    input.addEventListener("focus", (e) => {
+      const row = parseInt(e.target.dataset.row);
+      const col = parseInt(e.target.dataset.col);
+      selectedCell = { row, col };
+      selectedRow = null;
+      selectedColumn = null;
+      const cellName = `${String.fromCharCode(65 + col)}${row + 1}`;
+      cellInfo.textContent = `Hücre: ${cellName}`;
+      formulaCellName.textContent = cellName;
+      updateFormulaBar();
+      updateSelectionHighlight();
+    });
+  });
+  
+  // Sütun başlıklarına tıklama
+  excelEditorContent.querySelectorAll(".col-header").forEach(header => {
+    header.addEventListener("click", () => {
+      selectedColumn = parseInt(header.dataset.col);
+      selectedRow = null;
+      selectedCell = null;
+      formulaCellName.textContent = `${String.fromCharCode(65 + selectedColumn)}*`;
+      formulaInput.value = "";
+      updateSelectionHighlight();
+    });
+  });
+  
+  // Satır başlıklarına tıklama
+  excelEditorContent.querySelectorAll(".row-header").forEach(header => {
+    header.addEventListener("click", () => {
+      selectedRow = parseInt(header.dataset.row);
+      selectedColumn = null;
+      selectedCell = null;
+      formulaCellName.textContent = `*${selectedRow + 1}`;
+      formulaInput.value = "";
+      updateSelectionHighlight();
+    });
+  });
+  
+  // İlk hücreye focus
+  if (selectedCell) {
+    const input = excelEditorContent.querySelector(`input[data-row="${selectedCell.row}"][data-col="${selectedCell.col}"]`);
+    if (input) input.focus();
+  }
+  
+  updateSelectionHighlight();
+}
+
+// Formül çubuğunu güncelle
+function updateFormulaBar() {
+  if (selectedCell) {
+    const cell = excelData[selectedCell.row]?.[selectedCell.col];
+    if (cell) {
+      formulaInput.value = cell.value;
+    }
+  } else {
+    formulaInput.value = "";
+  }
+}
+
+function updateSelectionHighlight() {
+  excelEditorContent.querySelectorAll("td").forEach(td => {
+    td.classList.remove("selected-row");
+    td.classList.remove("selected-column");
+  });
+  excelEditorContent.querySelectorAll(".row-header").forEach(th => th.classList.remove("active"));
+  excelEditorContent.querySelectorAll(".col-header").forEach(th => th.classList.remove("active"));
+  
+  if (selectedRow !== null) {
+    excelEditorContent.querySelectorAll(`td[data-row="${selectedRow}"]`).forEach(td => td.classList.add("selected-row"));
+    const header = excelEditorContent.querySelector(`.row-header[data-row="${selectedRow}"]`);
+    if (header) header.classList.add("active");
+  }
+  
+  if (selectedColumn !== null) {
+    excelEditorContent.querySelectorAll(`td[data-col="${selectedColumn}"]`).forEach(td => td.classList.add("selected-column"));
+    const header = excelEditorContent.querySelector(`.col-header[data-col="${selectedColumn}"]`);
+    if (header) header.classList.add("active");
+  }
+}
+
+// Formül motoru (basit)
+function evaluateFormula(formula, currentRow, currentCol) {
+  try {
+    if (!formula.startsWith('=')) return formula;
+    
+    const expr = formula.substring(1).toUpperCase();
+    
+    // =SUM(A1:A10) gibi fonksiyonlar
+    if (expr.startsWith('SUM(')) {
+      const range = expr.match(/SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
+      if (range) {
+        const [, startCol, startRow, endCol, endRow] = range;
+        return calculateRange(startCol, parseInt(startRow)-1, endCol, parseInt(endRow)-1, 'sum');
+      }
+    }
+    
+    // =AVERAGE(A1:A10)
+    if (expr.startsWith('AVERAGE(') || expr.startsWith('AVG(')) {
+      const range = expr.match(/(AVERAGE|AVG)\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
+      if (range) {
+        const [, , startCol, startRow, endCol, endRow] = range;
+        return calculateRange(startCol, parseInt(startRow)-1, endCol, parseInt(endRow)-1, 'avg');
+      }
+    }
+    
+    // =COUNT(A1:A10)
+    if (expr.startsWith('COUNT(')) {
+      const range = expr.match(/COUNT\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
+      if (range) {
+        const [, startCol, startRow, endCol, endRow] = range;
+        return calculateRange(startCol, parseInt(startRow)-1, endCol, parseInt(endRow)-1, 'count');
+      }
+    }
+    
+    // Basit aritmetik (=A1+B1, =A1*2 vb.)
+    let result = expr;
+    const cellRefs = expr.match(/[A-Z]\d+/g);
+    if (cellRefs) {
+      cellRefs.forEach(ref => {
+        const col = ref.charCodeAt(0) - 65;
+        const row = parseInt(ref.substring(1)) - 1;
+        const value = parseFloat(excelData[row]?.[col]?.value || 0);
+        result = result.replace(ref, value);
+      });
+      return eval(result);
+    }
+    
+    return formula;
+  } catch (e) {
+    return '#HATA!';
+  }
+}
+
+function calculateRange(startCol, startRow, endCol, endRow, operation) {
+  const values = [];
+  const startC = startCol.charCodeAt(0) - 65;
+  const endC = endCol.charCodeAt(0) - 65;
+  
+  for (let r = startRow; r <= endRow; r++) {
+    for (let c = startC; c <= endC; c++) {
+      const val = parseFloat(excelData[r]?.[c]?.value || 0);
+      if (!isNaN(val)) values.push(val);
+    }
+  }
+  
+  switch (operation) {
+    case 'sum':
+      return values.reduce((a, b) => a + b, 0);
+    case 'avg':
+      return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    case 'count':
+      return values.length;
+    default:
+      return 0;
+  }
+}
+
+// Formül çubuğundan değer güncelle
+formulaInput.addEventListener("keypress", (e) => {
+  if (e.key === "Enter" && selectedCell) {
+    excelData[selectedCell.row][selectedCell.col].value = formulaInput.value;
+    renderExcelTable();
+  }
+});
+
+// Excel satır/sütun işlemleri
+addRowBtn.addEventListener("click", () => {
+  const cols = excelData[0]?.length || 10;
+  const newRow = Array(cols).fill(null).map(() => ({
+    value: "",
+    style: {
+      bold: false, italic: false, underline: false,
+      align: "left", bgColor: "#ffffff", textColor: "#000000"
+    }
+  }));
+  excelData.push(newRow);
+  renderExcelTable();
+});
+
+addColBtn.addEventListener("click", () => {
+  excelData.forEach(row => row.push({
+    value: "",
+    style: {
+      bold: false, italic: false, underline: false,
+      align: "left", bgColor: "#ffffff", textColor: "#000000"
+    }
+  }));
+  renderExcelTable();
+});
+
+deleteRowBtn.addEventListener("click", () => {
+  if (excelData.length > 1) {
+    excelData.pop();
+    renderExcelTable();
+  }
+});
+
+deleteColBtn.addEventListener("click", () => {
+  if (excelData[0]?.length > 1) {
+    excelData.forEach(row => row.pop());
+    renderExcelTable();
+  }
+});
+
+// Biçimlendirme butonları
+boldCellBtn.addEventListener("click", () => {
+  toggleStyleOnSelection("bold");
+});
+
+italicCellBtn.addEventListener("click", () => {
+  toggleStyleOnSelection("italic");
+});
+
+underlineCellBtn.addEventListener("click", () => {
+  toggleStyleOnSelection("underline");
+});
+
+alignLeftBtn.addEventListener("click", () => {
+  setAlignOnSelection("left");
+});
+
+alignCenterBtn.addEventListener("click", () => {
+  setAlignOnSelection("center");
+});
+
+alignRightBtn.addEventListener("click", () => {
+  setAlignOnSelection("right");
+});
+
+bgColorPicker.addEventListener("change", (e) => {
+  setColorOnSelection("bgColor", e.target.value);
+});
+
+textColorPicker.addEventListener("change", (e) => {
+  setColorOnSelection("textColor", e.target.value);
+});
+
+// Word kaydet
+saveWordBtn.addEventListener("click", async () => {
+  if (!currentEditingFile) {
+    alert("Dosya yolu bulunamadı! 'Farklı Kaydet' kullanın.");
+    return;
+  }
+  
+  const htmlContent = wordEditorContent.innerHTML;
+  const result = await window.kankaAPI.saveWord(currentEditingFile, htmlContent);
+  
+  if (result.success) {
+    alert("✅ Word dosyası kaydedildi!");
+    wordEditorModal.classList.add("hidden");
+  } else {
+    alert("❌ Hata: " + result.error);
+  }
+});
+
+// Word farklı kaydet
+saveWordAsBtn.addEventListener("click", async () => {
+  const filePath = await window.kankaAPI.showSaveDialog("document.docx", [
+    { name: "Word Belgesi", extensions: ["docx"] },
+    { name: "Tüm Dosyalar", extensions: ["*"] }
+  ]);
+  
+  if (!filePath) return;
+  
+  const htmlContent = wordEditorContent.innerHTML;
+  const result = await window.kankaAPI.saveWord(filePath, htmlContent);
+  
+  if (result.success) {
+    alert("✅ Word dosyası kaydedildi!");
+    wordEditorModal.classList.add("hidden");
+    currentEditingFile = filePath;
+  } else {
+    alert("❌ Hata: " + result.error);
+  }
+});
+
+// Excel kaydet
+saveExcelBtn.addEventListener("click", async () => {
+  if (!currentEditingFile) {
+    alert("Dosya yolu bulunamadı! 'Farklı Kaydet' kullanın.");
+    return;
+  }
+  
+  // Değerleri extract et (stil bilgisi olmadan)
+  const rows = excelData.map(row => row.map(cell => cell.value));
+  
+  const data = {
+    sheetName: "Sheet1",
+    rows: rows
+  };
+  
+  const result = await window.kankaAPI.saveExcel(currentEditingFile, data);
+  
+  if (result.success) {
+    alert("✅ Excel dosyası kaydedildi!");
+    excelEditorModal.classList.add("hidden");
+  } else {
+    alert("❌ Hata: " + result.error);
+  }
+});
+
+// Excel farklı kaydet
+saveExcelAsBtn.addEventListener("click", async () => {
+  const filePath = await window.kankaAPI.showSaveDialog("workbook.xlsx", [
+    { name: "Excel Çalışma Kitabı", extensions: ["xlsx"] },
+    { name: "Tüm Dosyalar", extensions: ["*"] }
+  ]);
+  
+  if (!filePath) return;
+  
+  // Değerleri extract et
+  const rows = excelData.map(row => row.map(cell => cell.value));
+  
+  const data = {
+    sheetName: "Sheet1",
+    rows: rows
+  };
+  
+  const result = await window.kankaAPI.saveExcel(filePath, data);
+  
+  if (result.success) {
+    alert("✅ Excel dosyası kaydedildi!");
+    excelEditorModal.classList.add("hidden");
+    currentEditingFile = filePath;
+  } else {
+    alert("❌ Hata: " + result.error);
+  }
+});
+
+// Modal kapatma
+closeWordEditor.addEventListener("click", () => wordEditorModal.classList.add("hidden"));
+cancelWordBtn.addEventListener("click", () => wordEditorModal.classList.add("hidden"));
+closeExcelEditor.addEventListener("click", () => excelEditorModal.classList.add("hidden"));
+cancelExcelBtn.addEventListener("click", () => excelEditorModal.classList.add("hidden"));
+
+// Dosya yüklendiğinde düzenle butonlarını göster/gizle
+function updateEditorButtons() {
+  const isWord = currentFileData?.type === "docx";
+  const isExcel = currentFileData?.type === "xlsx" || currentFileData?.type === "xls";
+  
+  if (isWord) {
+    editWordBtn.classList.remove("hidden");
+    editExcelBtn.classList.add("hidden");
+  } else if (isExcel) {
+    editWordBtn.classList.add("hidden");
+    editExcelBtn.classList.remove("hidden");
+  } else {
+    editWordBtn.classList.add("hidden");
+    editExcelBtn.classList.add("hidden");
+  }
+}
+
+// pickFileBtn eventini güncelle (mevcut fonksiyona updateEditorButtons ekle)
+const originalPickFileHandler = pickFileBtn.onclick;
+pickFileBtn.addEventListener("click", async () => {
+  // ... mevcut kod ...
+  setTimeout(updateEditorButtons, 500);
+});
+
 // İlk yükleme mesajı
-console.log("✅ KankaAI hazır!");
+console.log("✅ KankaAI hazır! (Editör modülleri yüklendi)");

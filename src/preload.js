@@ -28,5 +28,14 @@ contextBridge.exposeInMainWorld("kankaAPI", {
     ipcRenderer.on("open-file-path", (_event, filePath) => {
       callback(filePath);
     });
-  }
+  },
+  
+  // Word dosyası kaydetme
+  saveWord: (filePath, htmlContent) => ipcRenderer.invoke("save-word", filePath, htmlContent),
+  
+  // Excel dosyası kaydetme
+  saveExcel: (filePath, data) => ipcRenderer.invoke("save-excel", filePath, data),
+  
+  // Farklı kaydet dialogu
+  showSaveDialog: (defaultPath, filters) => ipcRenderer.invoke("save-file-dialog", defaultPath, filters)
 });

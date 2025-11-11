@@ -1,0 +1,30 @@
+Windows Registry Editor Version 5.00
+
+; Eski KankaAI kayitlarini sil
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.pdf\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.docx\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.xlsx\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.txt\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.zip\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.udf\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.jpg\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.jpeg\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.png\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.gif\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.webp\shell\KankaAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.bmp\shell\KankaAI]
+
+; Eski FilePeekAI kayitlarini sil
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.pdf\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.docx\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.xlsx\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.txt\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.zip\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.udf\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.jpg\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.jpeg\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.png\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.gif\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.webp\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\SystemFileAssociations\.bmp\shell\FilePeekAI]
+

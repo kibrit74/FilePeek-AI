@@ -10,8 +10,8 @@ if (!API_KEY) {
 const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
 
 /**
- * Dosya içeriğini özetler
- * @param {string} text - Özetlenecek metin
+ * Dosya içeriğini özetler (Excel için tüm sayfalar dahil)
+ * @param {string} text - Özetlenecek metin (sample - her sayfadan örnek)
  * @returns {Promise<string>} - Özet metni
  */
 async function summarize(text) {
@@ -22,11 +22,26 @@ async function summarize(text) {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
-    const prompt = `Aşağıdaki belgeyi Türkçe olarak 5-7 madde halinde özetle. 
+    // Excel mi kontrol et
+    const isExcel = text.includes("=== SAYFA");
+    
+    const prompt = isExcel 
+      ? `Aşağıdaki Excel belgesinin TÜM SAYFALARINI analiz ederek Türkçe özetini çıkar.
+Her sayfa için:
+- Sayfa adı ve içerik türü
+- Sütun başlıkları (varsa)
+- Toplam satır sayısı
+- Önemli bulgular
+
+Excel'de birden fazla sayfa varsa HER BİRİNİ ayrı ayrı özetle.
+
+EXCEL DOSYASI:
+${text}`
+      : `Aşağıdaki belgenin ilk sayfasını Türkçe olarak 3-5 madde halinde özetle. 
 Her madde kısa ve net olsun. Sadece önemli bilgileri içersin.
 
 BELGE İÇERİĞİ:
-${text.slice(0, 15000)}`;
+${text}`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -39,8 +54,8 @@ ${text.slice(0, 15000)}`;
 }
 
 /**
- * Belge içeriği hakkında soru sorar ve cevap alır
- * @param {string} text - Belge içeriği
+ * Belge içeriği hakkında soru sorar ve cevap alır (TÜM DOSYAYI ANALİZ EDER)
+ * @param {string} text - Belge içeriği (fullText - tüm dosya)
  * @param {string} question - Sorulacak soru
  * @returns {Promise<string>} - Cevap metni
  */
@@ -52,13 +67,65 @@ async function askQuestion(text, question) {
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
-    const prompt = `Aşağıdaki belgeye dayanarak soruyu Türkçe olarak cevapla.
-Sadece belgede geçen bilgilere göre cevap ver. Eğer belgede yoksa "Bu bilgi belgede bulunmuyor" de.
+    // Excel mi kontrol et
+    const isExcel = text.includes("=== SAYFA");
+    
+    // TÜM dosyayı analiz et (100.000 karaktere kadar)
+    const prompt = isExcel
+      ? `Sen bir Excel veri analiz uzmanısın. Aşağıdaki Excel dosyasının TÜM SAYFALARINI detaylı şekilde tarayarak soruyu cevapla.
+
+🔍 GELİŞMİŞ EXCEL ARAMA KURALLARI:
+
+1. SAYFA TARAMA:
+   - Her "=== SAYFA" işaretine dikkat et
+   - Sayfa numarası ve adını not et
+   - Tüm sayfaları sırayla tara
+
+2. SÜTUN BAŞLIKLARI:
+   - İlk satırı sütun başlıkları olarak algıla
+   - Sütun adlarını belirt
+   - Hangi sütunda aradığını söyle
+
+3. VERİ EŞLEŞTIRME:
+   - TAM EŞLEŞME: Sayıları birebir eşleştir
+   - KISMİ EŞLEŞME: Eğer tam bulamazsan benzer verileri göster
+   - BAĞLAM: Bulunan verinin çevresindeki satırları da göster
+
+4. ÇOKLU SONUÇ:
+   - Eğer birden fazla eşleşme varsa HEPSİNİ listele
+   - Her eşleşme için: Sayfa adı + Satır numarası + Sütun adı
+   - Toplam kaç eşleşme bulunduğunu belirt
+
+5. SONUÇ FORMATI:
+   ✅ BULUNDU:
+      - Sayfa: [Sayfa Adı]
+      - Satır: [Satır No]
+      - Sütun: [Sütun Adı]
+      - Değer: [Bulunan Veri]
+      - Bağlam: [Aynı satırdaki diğer önemli bilgiler]
+   
+   ❌ BULUNAMADI:
+      - "Bu veri bulunamadı"
+      - Benzer veriler varsa göster
+      - Hangi sayfalara bakıldığını belirt
+
+6. AKILLI ARAMA:
+   - Büyük/küçük harf duyarsız ara
+   - Boşlukları göz ardı et
+   - Tarih formatlarını anlamsallaştır (2019, 2019/01/01, vb.)
+   - Sayısal değerlerde virgül/nokta farklarını tolere et
 
 SORU: ${question}
 
-BELGE İÇERİĞİ:
-${text.slice(0, 15000)}`;
+EXCEL DOSYASI (TÜM SAYFALAR):
+${text.slice(0, 100000)}`
+      : `Aşağıdaki belgenin TAMAMINI analiz ederek soruyu Türkçe olarak cevapla.
+Belgede geçen bilgilere göre detaylı cevap ver. Eğer belgede yoksa "Bu bilgi belgede bulunmuyor" de.
+
+SORU: ${question}
+
+BELGE TAMAMI:
+${text.slice(0, 100000)}`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;

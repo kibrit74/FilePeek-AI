@@ -1,0 +1,98 @@
+Windows Registry Editor Version 5.00
+
+; FilePeek AI - PDF için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.pdf\shell\FilePeekAI]
+@="FilePeek AI ile Ac"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.pdf\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - DOCX için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.docx\shell\FilePeekAI]
+@="FilePeek AI ile Ac"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.docx\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - XLSX için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.xlsx\shell\FilePeekAI]
+@="FilePeek AI ile Ac"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.xlsx\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - TXT için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.txt\shell\FilePeekAI]
+@="FilePeek AI ile Ac"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.txt\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - ZIP için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.zip\shell\FilePeekAI]
+@="FilePeek AI ile Ac"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.zip\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - UDF için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.udf\shell\FilePeekAI]
+@="FilePeek AI ile Ac"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.udf\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - JPG için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.jpg\shell\FilePeekAI]
+@="FilePeek AI ile Goruntule"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.jpg\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - JPEG için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.jpeg\shell\FilePeekAI]
+@="FilePeek AI ile Goruntule"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.jpeg\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - PNG için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.png\shell\FilePeekAI]
+@="FilePeek AI ile Goruntule"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.png\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - GIF için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.gif\shell\FilePeekAI]
+@="FilePeek AI ile Goruntule"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.gif\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - WEBP için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.webp\shell\FilePeekAI]
+@="FilePeek AI ile Goruntule"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.webp\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; FilePeek AI - BMP için sağ tık menüsü
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.bmp\shell\FilePeekAI]
+@="FilePeek AI ile Goruntule"
+"Icon"="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\SystemFileAssociations\.bmp\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+

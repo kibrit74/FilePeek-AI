@@ -1,0 +1,69 @@
+========================================
+FilePeek AI - SAĞ TIK MENÜSÜ KURULUM REHBERİ
+========================================
+
+SORUN:
+------
+PDF, Word, Excel, UDF ve resim dosyalarına sağ tıklayınca 
+"FilePeek AI ile Aç" seçeneği görünmüyor.
+
+
+ÇÖZÜM - ADIM ADIM:
+------------------
+
+1. UYGULAMAYI KUR
+   - "FilePeek AI Setup 1.0.0.exe" dosyasını çalıştır
+   - Kurulum tamamlansın
+
+
+2. SAĞ TIK MENÜSÜNÜ EKLE
+   
+   KOLAY YOL:
+   ----------
+   a) "install-right-click.bat" dosyasına SAĞ TIKLA
+   b) "Yönetici olarak çalıştır" seç
+   c) Kurulum tamamlanacak!
+
+
+   MANUEL YOL (eğer bat dosyası çalışmazsa):
+   ------------------------------------------
+   a) "install-context-menu.reg" dosyasına ÇİFT TIKLA
+   b) "Evet" butonuna tıkla
+   c) "Tamam" butonuna tıkla
+
+
+3. TEST ET
+   - Masaüstünde bir PDF, resim veya UDF dosyasına SAĞ TIKLA
+   - "FilePeek AI ile Aç" seçeneğini göreceksin!
+
+
+DESTEKLENEN DOSYA TÜRLERİ:
+---------------------------
+✓ PDF (.pdf)
+✓ Word (.docx)
+✓ Excel (.xlsx, .xls)
+✓ Metin (.txt)
+✓ UDF (.udf) - Hukuki belgeler
+✓ Resimler (.jpg, .jpeg, .png, .gif, .webp, .bmp)
+✓ ZIP (.zip)
+
+
+KALDIRMAK İÇİN:
+---------------
+- "uninstall-right-click.bat" dosyasını yönetici olarak çalıştır
+  VEYA
+- "uninstall-context-menu.reg" dosyasına çift tıkla
+
+
+SORUN YAŞARSAN:
+---------------
+1. Bilgisayarı yeniden başlat
+2. Kurulum scriptini tekrar çalıştır
+3. Uygulamanın "C:\Program Files\FilePeek AI\" klasöründe 
+   kurulu olduğundan emin ol
+
+
+========================================
+İyi kullanımlar! 🚀
+========================================
+

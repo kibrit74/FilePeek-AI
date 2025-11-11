@@ -1,0 +1,27 @@
+Windows Registry Editor Version 5.00
+
+; UDF dosya uzantisini kaydet
+[HKEY_CLASSES_ROOT\.udf]
+@="UDF.Document"
+"Content Type"="application/udf"
+
+[HKEY_CLASSES_ROOT\UDF.Document]
+@="UDF Belgesi"
+
+[HKEY_CLASSES_ROOT\UDF.Document\DefaultIcon]
+@="C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe,0"
+
+; UDF icin sag tik menusu
+[HKEY_CLASSES_ROOT\UDF.Document\shell\FilePeekAI]
+@="FilePeek AI ile Ac"
+
+[HKEY_CLASSES_ROOT\UDF.Document\shell\FilePeekAI\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+
+; Birlikte Ac menusune ekle
+[HKEY_CLASSES_ROOT\UDF.Document\shell\open]
+@="Ac"
+
+[HKEY_CLASSES_ROOT\UDF.Document\shell\open\command]
+@="\"C:\\Users\\Obuzhukuk\\AppData\\Local\\Programs\\filepeek-ai\\FilePeek AI.exe\" \"%1\""
+

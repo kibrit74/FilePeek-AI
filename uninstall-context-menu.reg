@@ -1,0 +1,18 @@
+Windows Registry Editor Version 5.00
+
+; FilePeek AI sağ tık menüsünü kaldır
+
+[-HKEY_CLASSES_ROOT\*\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.pdf\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.docx\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.xlsx\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.udf\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.txt\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.jpg\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.jpeg\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.png\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.gif\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.webp\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.bmp\shell\FilePeekAI]
+[-HKEY_CLASSES_ROOT\.zip\shell\FilePeekAI]
+

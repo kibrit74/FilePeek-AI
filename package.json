@@ -8,6 +8,7 @@
     "dev:electron": "start landing-page.html && electron .",
     "build": "electron-builder",
     "dist": "electron-builder --win --x64",
+    "dist:win": "electron-builder --win --x64",
     "dist:portable": "electron-builder --win portable"
   },
   "keywords": [
@@ -22,6 +23,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "axios": "^1.7.0",
+    "docx": "^9.5.1",
     "dotenv": "^16.4.0",
     "jszip": "^3.10.0",
     "mammoth": "^1.8.0",
@@ -38,8 +40,13 @@
     "productName": "FilePeek AI",
     "files": [
       "src/**/*",
-      "package.json",
-      ".env"
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".env",
+        "to": ".env"
+      }
     ],
     "directories": {
       "output": "dist"
@@ -98,6 +105,11 @@
       {
         "ext": "bmp",
         "name": "BMP Image",
+        "role": "Viewer"
+      },
+      {
+        "ext": "udf",
+        "name": "UDF Document",
         "role": "Viewer"
       }
     ],

@@ -1,0 +1,266 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --mac-bg: #F5F5F7;
+  --mac-sidebar: rgba(242, 242, 247, 0.8);
+  --mac-content: rgba(255, 255, 255, 0.7);
+  --mac-accent: #007AFF;
+  --mac-text: #1D1D1F;
+  --mac-text-secondary: #86868B;
+  --mac-border: rgba(0, 0, 0, 0.08);
+  --mac-shadow: rgba(0, 0, 0, 0.1);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  background: var(--mac-bg);
+  color: var(--mac-text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.container {
+  width: 100vw;
+  height: 100vh;
+  background: var(--mac-content);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* macOS Titlebar */
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 32px;
+  background: var(--mac-sidebar);
+  border: 1px solid var(--mac-border);
+  border-radius: 16px;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);
+}
+
+.logo-icon {
+  position: relative;
+  width: 26px;
+  height: 30px;
+}
+
+.doc-shape {
+  width: 20px;
+  height: 26px;
+  background: linear-gradient(135deg, #007AFF 0%, #0051D5 100%);
+  border-radius: 4px;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.25);
+}
+
+.doc-shape::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  background: #0051D5;
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+}
+
+.eye {
+  position: absolute;
+  top: 50%;
+  right: -5px;
+  transform: translateY(-50%);
+  font-size: 14px;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.15));
+}
+
+.logo h1 {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--mac-text);
+  letter-spacing: -0.4px;
+}
+
+.logo .ai {
+  background: linear-gradient(135deg, #007AFF 0%, #0051D5 100%);
+  color: white;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 4px;
+  letter-spacing: 0.3px;
+}
+
+/* macOS Content Area */
+.content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+
+.file-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mac-text-secondary);
+  letter-spacing: 0.2px;
+  padding: 12px 24px;
+  background: var(--mac-sidebar);
+  border-bottom: 1px solid var(--mac-border);
+}
+
+.preview-box {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 24px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--mac-text);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.preview-box::-webkit-scrollbar {
+  width: 8px;
+}
+
+.preview-box::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.preview-box::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.preview-box::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+  background-clip: content-box;
+}
+
+.loading-spinner {
+  text-align: center;
+  color: var(--mac-text-secondary);
+  font-weight: 500;
+  font-size: 13px;
+  padding: 60px 20px;
+}
+
+/* macOS Input Area */
+.question-area {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--mac-sidebar);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border-top: 1px solid var(--mac-border);
+}
+
+.question-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--mac-border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--mac-text);
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.question-input:focus {
+  border-color: var(--mac-accent);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.question-input::placeholder {
+  color: var(--mac-text-secondary);
+}
+
+.ask-btn {
+  padding: 10px 24px;
+  background: var(--mac-accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+}
+
+.ask-btn:hover {
+  background: #0062CC;
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.ask-btn:active {
+  transform: scale(0.98);
+}
+
+/* macOS AI Response */
+.ai-response {
+  margin: 16px;
+  background: rgba(0, 122, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 122, 255, 0.15);
+  border-radius: 12px;
+  padding: 16px 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--mac-text);
+  box-shadow: 0 2px 12px rgba(0, 122, 255, 0.08);
+  animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* macOS Image Preview */
+.preview-box img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  margin: 12px 0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+}
+

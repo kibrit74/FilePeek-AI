@@ -1,12 +1,19 @@
-require("dotenv").config();
+const path = require("path");
+
+// Paketlenmiş uygulamada .env dosyasını doğru konumdan oku
+const envPath = require("electron").app.isPackaged
+  ? path.join(process.resourcesPath, ".env")
+  : path.join(__dirname, "..", ".env");
+
+require("dotenv").config({ path: envPath });
 
 const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut } = require("electron");
-const path = require("path");
 const fs = require("fs");
 const XLSX = require("xlsx");
 const JSZip = require("jszip");
 const mammoth = require("mammoth");
 const pdfParse = require("pdf-parse");
+const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require("docx");
 const { summarize, askQuestion, analyzeImage, askImageQuestion } = require("./utils/ai");
 
 let mainWindow;
@@ -29,10 +36,11 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
   
-  // Geliştirme modunda DevTools'u aç
-  if (process.env.NODE_ENV === "development") {
-    mainWindow.webContents.openDevTools();
-  }
+  // DevTools otomatik açılmasını kapattık
+  // İsterseniz F12 tuşu ile manuel açabilirsiniz
+  // if (process.env.NODE_ENV === "development") {
+  //   mainWindow.webContents.openDevTools();
+  // }
 }
 
 // Uygulama hazır olunca pencereyi aç
@@ -175,18 +183,45 @@ ipcMain.handle("peek-file", async (_event, filePath) => {
         ? XLSX.utils.sheet_to_json(firstSheet, { header: 1 }).slice(0, 10)
         : [];
       
-      // Excel'i metin olarak çevir (AI için)
+      // Excel'i metin olarak çevir (AI için - TÜM SAYFALAR - GELİŞMİŞ)
       let textContent = "";
-      sheetNames.forEach(sheetName => {
+      let sampleContent = ""; // Özet için her sayfadan örnek
+      let totalRows = 0;
+      
+      sheetNames.forEach((sheetName, index) => {
         const sheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        textContent += `Sayfa: ${sheetName}\n`;
-        jsonData.forEach(row => {
-          textContent += row.join(" | ") + "\n";
+        totalRows += jsonData.length;
+        
+        // TÜM VERİ (fullText için) - SATIR NUMARALARI İLE
+        textContent += `\n\n=== SAYFA ${index + 1}: ${sheetName} ===\n`;
+        textContent += `Toplam Satır: ${jsonData.length}\n\n`;
+        
+        jsonData.forEach((row, rowIndex) => {
+          // Satır numarası ekle (Excel gibi 1'den başlasın)
+          const rowNum = rowIndex + 1;
+          textContent += `[Satır ${rowNum}] ${row.join(" | ")}\n`;
         });
+        
+        // HER SAYFADAN ÖRNEK (sample için - özet için)
+        sampleContent += `\n\n=== SAYFA ${index + 1}: ${sheetName} ===\n`;
+        sampleContent += `Toplam Satır: ${jsonData.length}\n`;
+        
+        const sampleRows = jsonData.slice(0, 25); // Her sayfadan ilk 25 satır
+        sampleRows.forEach((row, rowIndex) => {
+          const rowNum = rowIndex + 1;
+          sampleContent += `[Satır ${rowNum}] ${row.join(" | ")}\n`;
+        });
+        
+        if (jsonData.length > 25) {
+          sampleContent += `... (${jsonData.length - 25} satır daha var)\n`;
+        }
       });
+      
       result.fullText = textContent;
-      result.sample = textContent.slice(0, 1500);
+      result.sample = sampleContent;
+      result.totalSheets = sheetNames.length;
+      result.totalRows = totalRows;
     }
     // ZIP dosyası
     else if (ext === "zip") {
@@ -408,6 +443,112 @@ if (!gotTheLock) {
     }
   });
 }
+
+// Word dosyası kaydetme
+ipcMain.handle("save-word", async (_event, filePath, htmlContent) => {
+  try {
+    // HTML içeriğini parse edip Word dosyasına çevir
+    const paragraphs = [];
+    const tempDiv = htmlContent.split('\n');
+    
+    for (const line of tempDiv) {
+      if (line.trim() === '') continue;
+      
+      // Başlıkları tespit et
+      if (line.startsWith('<h1>')) {
+        const text = line.replace(/<\/?h1>/g, '').trim();
+        paragraphs.push(
+          new Paragraph({
+            text: text,
+            heading: HeadingLevel.HEADING_1,
+          })
+        );
+      } else if (line.startsWith('<h2>')) {
+        const text = line.replace(/<\/?h2>/g, '').trim();
+        paragraphs.push(
+          new Paragraph({
+            text: text,
+            heading: HeadingLevel.HEADING_2,
+          })
+        );
+      } else if (line.startsWith('<h3>')) {
+        const text = line.replace(/<\/?h3>/g, '').trim();
+        paragraphs.push(
+          new Paragraph({
+            text: text,
+            heading: HeadingLevel.HEADING_3,
+          })
+        );
+      } else {
+        // Normal metin - bold, italic, underline kontrolü
+        const text = line.replace(/<[^>]+>/g, '');
+        const runs = [];
+        
+        const hasBold = line.includes('<b>') || line.includes('<strong>');
+        const hasItalic = line.includes('<i>') || line.includes('<em>');
+        const hasUnderline = line.includes('<u>');
+        
+        runs.push(
+          new TextRun({
+            text: text,
+            bold: hasBold,
+            italics: hasItalic,
+            underline: hasUnderline ? {} : undefined,
+          })
+        );
+        
+        paragraphs.push(new Paragraph({ children: runs }));
+      }
+    }
+    
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: paragraphs,
+      }],
+    });
+    
+    const buffer = await Packer.toBuffer(doc);
+    fs.writeFileSync(filePath, buffer);
+    
+    return { success: true, message: "Word dosyası kaydedildi!" };
+  } catch (error) {
+    console.error("Word kaydetme hatası:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Excel dosyası kaydetme
+ipcMain.handle("save-excel", async (_event, filePath, data) => {
+  try {
+    // data = { sheetName, rows: [[...], [...], ...] }
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(data.rows);
+    XLSX.utils.book_append_sheet(workbook, worksheet, data.sheetName || "Sheet1");
+    XLSX.writeFile(workbook, filePath);
+    
+    return { success: true, message: "Excel dosyası kaydedildi!" };
+  } catch (error) {
+    console.error("Excel kaydetme hatası:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Farklı kaydet dialog'u
+ipcMain.handle("save-file-dialog", async (_event, defaultPath, filters) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: defaultPath,
+    filters: filters || [
+      { name: "Tüm Dosyalar", extensions: ["*"] }
+    ],
+  });
+  
+  if (result.canceled) {
+    return null;
+  }
+  
+  return result.filePath;
+});
 
 // Uygulama kapanırken klavye kısayollarını temizle
 app.on('will-quit', () => {

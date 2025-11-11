@@ -1,0 +1,105 @@
+Windows Registry Editor Version 5.00
+
+; Tüm dosyalar için genel menü
+[HKEY_CLASSES_ROOT\*\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\*\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; PDF dosyaları
+[HKEY_CLASSES_ROOT\.pdf\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.pdf\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; Word dosyaları
+[HKEY_CLASSES_ROOT\.docx\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.docx\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; Excel dosyaları
+[HKEY_CLASSES_ROOT\.xlsx\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.xlsx\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; UDF dosyaları
+[HKEY_CLASSES_ROOT\.udf\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.udf\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; Metin dosyaları
+[HKEY_CLASSES_ROOT\.txt\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.txt\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; JPG resimler
+[HKEY_CLASSES_ROOT\.jpg\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.jpg\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; JPEG resimler
+[HKEY_CLASSES_ROOT\.jpeg\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.jpeg\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; PNG resimler
+[HKEY_CLASSES_ROOT\.png\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.png\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; GIF resimler
+[HKEY_CLASSES_ROOT\.gif\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.gif\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; WebP resimler
+[HKEY_CLASSES_ROOT\.webp\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.webp\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; BMP resimler
+[HKEY_CLASSES_ROOT\.bmp\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.bmp\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""
+
+; ZIP dosyaları
+[HKEY_CLASSES_ROOT\.zip\shell\FilePeekAI]
+@="FilePeek AI ile Aç"
+"Icon"="C:\\Program Files\\FilePeek AI\\FilePeek AI.exe"
+
+[HKEY_CLASSES_ROOT\.zip\shell\FilePeekAI\command]
+@="\"C:\\Program Files\\FilePeek AI\\FilePeek AI.exe\" \"%1\""

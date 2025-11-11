@@ -97,6 +97,14 @@
                 <span class="ai-icon">⚡</span>
                 Özetle
               </button>
+              <button id="editWordBtn" class="btn-ai btn-secondary hidden">
+                <span class="ai-icon">📝</span>
+                Düzenle
+              </button>
+              <button id="editExcelBtn" class="btn-ai btn-secondary hidden">
+                <span class="ai-icon">📊</span>
+                Düzenle
+              </button>
               <button id="translateBtn" class="btn-ai btn-secondary">
                 <span class="ai-icon">🌐</span>
                 Çevir
@@ -227,22 +235,22 @@
             </div>
           </div>
           
-          <div class="setting-group">
-            <label>Renk Teması</label>
-            <div class="color-themes">
-              <button class="color-theme" data-color="blue" style="background: #2563eb;" title="Mavi"></button>
-              <button class="color-theme" data-color="green" style="background: #10b981;" title="Yeşil"></button>
-              <button class="color-theme" data-color="purple" style="background: #8b5cf6;" title="Mor"></button>
-              <button class="color-theme" data-color="orange" style="background: #f59e0b;" title="Turuncu"></button>
-            </div>
+        <div class="setting-group">
+          <label>Renk Teması</label>
+          <div class="color-themes">
+            <button class="color-theme" data-color="blue" style="background: #2563eb;" title="Mavi"></button>
+            <button class="color-theme" data-color="green" style="background: #10b981;" title="Yeşil"></button>
+            <button class="color-theme" data-color="purple" style="background: #8b5cf6;" title="Mor"></button>
+            <button class="color-theme" data-color="orange" style="background: #f59e0b;" title="Turuncu"></button>
           </div>
+        </div>
           
-          <div class="setting-group">
+        <div class="setting-group">
             <label>Dil / Language</label>
-            <select id="langSelect" class="setting-select">
+          <select id="langSelect" class="setting-select">
               <option value="tr">🇹🇷 Türkçe</option>
               <option value="en">🇬🇧 English</option>
-            </select>
+          </select>
           </div>
         </div>
         
@@ -279,6 +287,94 @@
           </div>
         </div>
         
+      </div>
+    </div>
+  </div>
+
+  <!-- Word Düzenleyici Modal -->
+  <div id="wordEditorModal" class="modal hidden">
+    <div class="modal-content editor-modal">
+      <div class="modal-header">
+        <h2>📝 Word Düzenle</h2>
+        <button class="modal-close" id="closeWordEditor">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="editor-toolbar">
+          <button class="toolbar-btn" id="boldBtn" title="Kalın"><b>B</b></button>
+          <button class="toolbar-btn" id="italicBtn" title="İtalik"><i>I</i></button>
+          <button class="toolbar-btn" id="underlineBtn" title="Altı Çizili"><u>U</u></button>
+          <div class="toolbar-divider"></div>
+          <select id="headingSelect" class="toolbar-select">
+            <option value="p">Normal Metin</option>
+            <option value="h1">Başlık 1</option>
+            <option value="h2">Başlık 2</option>
+            <option value="h3">Başlık 3</option>
+          </select>
+          <div class="toolbar-divider"></div>
+          <button class="toolbar-btn" id="listBtn" title="Liste">• Liste</button>
+        </div>
+        <div id="wordEditorContent" class="word-editor" contenteditable="true"></div>
+        <div class="editor-actions">
+          <button id="saveWordBtn" class="btn-primary">💾 Kaydet</button>
+          <button id="saveWordAsBtn" class="btn-secondary">💾 Farklı Kaydet</button>
+          <button id="cancelWordBtn" class="btn-secondary">İptal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Excel Düzenleyici Modal -->
+  <div id="excelEditorModal" class="modal hidden">
+    <div class="modal-content editor-modal excel-editor-modal">
+      <div class="modal-header">
+        <h2>📊 Excel Düzenle</h2>
+        <button class="modal-close" id="closeExcelEditor">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Formül Çubuğu -->
+        <div class="formula-bar">
+          <span class="formula-label" id="formulaCellName">A1</span>
+          <input type="text" id="formulaInput" class="formula-input" placeholder="Formül veya değer girin (örn: =SUM(A1:A10))" />
+        </div>
+        
+        <div class="editor-toolbar">
+          <button class="toolbar-btn" id="addRowBtn" title="Satır Ekle">+ Satır</button>
+          <button class="toolbar-btn" id="addColBtn" title="Sütun Ekle">+ Sütun</button>
+          <button class="toolbar-btn" id="deleteRowBtn" title="Satır Sil">- Satır</button>
+          <button class="toolbar-btn" id="deleteColBtn" title="Sütun Sil">- Sütun</button>
+          <div class="toolbar-divider"></div>
+          
+          <!-- Biçimlendirme -->
+          <button class="toolbar-btn" id="boldCellBtn" title="Kalın"><b>B</b></button>
+          <button class="toolbar-btn" id="italicCellBtn" title="İtalik"><i>I</i></button>
+          <button class="toolbar-btn" id="underlineCellBtn" title="Altı Çizili"><u>U</u></button>
+          <div class="toolbar-divider"></div>
+          
+          <!-- Hizalama -->
+          <button class="toolbar-btn" id="alignLeftBtn" title="Sola Hizala">⬅</button>
+          <button class="toolbar-btn" id="alignCenterBtn" title="Ortala">↔</button>
+          <button class="toolbar-btn" id="alignRightBtn" title="Sağa Hizala">➡</button>
+          <div class="toolbar-divider"></div>
+          
+          <!-- Renkler -->
+          <label class="toolbar-color-btn" title="Hücre Rengi">
+            🎨 Arka Plan
+            <input type="color" id="bgColorPicker" value="#ffffff" />
+          </label>
+          <label class="toolbar-color-btn" title="Metin Rengi">
+            🖍️ Metin
+            <input type="color" id="textColorPicker" value="#000000" />
+          </label>
+          <div class="toolbar-divider"></div>
+          
+          <span class="toolbar-info" id="cellInfo">Hücre: A1</span>
+        </div>
+        <div id="excelEditorContent" class="excel-editor-container"></div>
+        <div class="editor-actions">
+          <button id="saveExcelBtn" class="btn-primary">💾 Kaydet</button>
+          <button id="saveExcelAsBtn" class="btn-secondary">💾 Farklı Kaydet</button>
+          <button id="cancelExcelBtn" class="btn-secondary">İptal</button>
+        </div>
       </div>
     </div>
   </div>
