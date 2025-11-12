@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("kankaAPI", {
   
   // AI resim analizi
   aiAnalyzeImage: (base64Data, mimeType) => ipcRenderer.invoke("ai-analyze-image", base64Data, mimeType),
+  aiAnalyzeImageQuick: (base64Data, mimeType) => ipcRenderer.invoke("ai-analyze-image-quick", base64Data, mimeType),
   
   // AI resim soru-cevap
   aiImageQuestion: (base64Data, mimeType, question) => ipcRenderer.invoke("ai-image-question", base64Data, mimeType, question),
@@ -29,6 +30,16 @@ contextBridge.exposeInMainWorld("kankaAPI", {
       callback(filePath);
     });
   },
+  
+  // Önizleme penceresi için dosya bilgisi
+  onPreviewFile: (callback) => {
+    ipcRenderer.on("preview-open-file", (_event, filePath) => {
+      callback(filePath);
+    });
+  },
+
+  // Tam arayüze geçiş
+  openFullView: (filePath) => ipcRenderer.invoke("open-full-view", filePath),
   
   // Word dosyası kaydetme
   saveWord: (filePath, htmlContent) => ipcRenderer.invoke("save-word", filePath, htmlContent),

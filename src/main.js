@@ -14,18 +14,35 @@ const JSZip = require("jszip");
 const mammoth = require("mammoth");
 const pdfParse = require("pdf-parse");
 const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require("docx");
-const { summarize, askQuestion, analyzeImage, askImageQuestion } = require("./utils/ai");
+const { summarize, askQuestion, analyzeImage, askImageQuestion, quickDescribeImage } = require("./utils/ai");
+
+const SUPPORTED_EXTENSIONS = [
+  ".pdf", ".docx", ".xlsx", ".xls", ".txt", ".md", ".csv", ".zip",
+  ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".udf"
+];
 
 let mainWindow;
+let previewWindow = null;
+let pendingFilePath = null;
+let queuedFileToOpen = null;
+let previewTransitioning = false;
 
 // Ana pencereyi oluştur
-function createWindow() {
+function createWindow(show = true) {
+  if (mainWindow) {
+    if (show && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+    return mainWindow;
+  }
+
   // Menüyü tamamen kaldır
   Menu.setApplicationMenu(null);
   
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    show,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -34,18 +51,126 @@ function createWindow() {
     icon: path.join(__dirname, "../build/icon.png"),
   });
 
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
+
+  mainWindow.once("ready-to-show", () => {
+    if (show) {
+      mainWindow.show();
+    }
+  });
+
+  mainWindow.webContents.on("did-finish-load", () => {
+    if (queuedFileToOpen) {
+      mainWindow.webContents.send("open-file-path", queuedFileToOpen);
+      queuedFileToOpen = null;
+    }
+  });
+
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
   
-  // DevTools otomatik açılmasını kapattık
-  // İsterseniz F12 tuşu ile manuel açabilirsiniz
-  // if (process.env.NODE_ENV === "development") {
-  //   mainWindow.webContents.openDevTools();
-  // }
+  return mainWindow;
+}
+
+function createPreviewWindow(filePath) {
+  if (previewWindow) {
+    previewWindow.focus();
+    previewWindow.webContents.send("preview-open-file", filePath);
+    return;
+  }
+
+  previewWindow = new BrowserWindow({
+    width: 520,
+    height: 420,
+    resizable: false,
+    fullscreenable: false,
+    minimizable: false,
+    maximizable: false,
+    show: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+    icon: path.join(__dirname, "../build/icon.png"),
+  });
+
+  previewWindow.on("closed", () => {
+    previewWindow = null;
+    if (previewTransitioning) {
+      previewTransitioning = false;
+      return;
+    }
+    pendingFilePath = null;
+    queuedFileToOpen = null;
+    // Kullanıcı önizlemeyi kapattıysa uygulamayı kapat
+    if (!mainWindow || !mainWindow.isVisible()) {
+      if (mainWindow) {
+        mainWindow.close();
+      } else {
+        app.quit();
+      }
+    }
+  });
+
+  previewWindow.loadFile(path.join(__dirname, "renderer", "preview.html"));
+
+  previewWindow.webContents.once("did-finish-load", () => {
+    previewWindow?.webContents.send("preview-open-file", filePath);
+  });
+}
+
+function sendFileToMainWindow(filePath) {
+  if (!filePath) return;
+
+  if (!mainWindow) {
+    queuedFileToOpen = filePath;
+    return;
+  }
+
+  if (mainWindow.webContents.isLoading()) {
+    queuedFileToOpen = filePath;
+  } else {
+    mainWindow.webContents.send("open-file-path", filePath);
+  }
+}
+
+function getSupportedFileFromArgs(args) {
+  if (!args || !args.length) return null;
+  return args.find(arg => SUPPORTED_EXTENSIONS.includes(path.extname(arg).toLowerCase()));
+}
+
+function handleFileOpen(filePath, { forcePreview = true } = {}) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return;
+  }
+
+  pendingFilePath = filePath;
+
+  if (!mainWindow) {
+    createWindow(forcePreview ? false : true);
+  }
+
+  if (!forcePreview) {
+    sendFileToMainWindow(filePath);
+    if (mainWindow && !mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+    return;
+  }
+
+  createPreviewWindow(filePath);
 }
 
 // Uygulama hazır olunca pencereyi aç
 app.whenReady().then(() => {
-  createWindow();
+  const initialFile = getSupportedFileFromArgs(process.argv);
+  if (initialFile && fs.existsSync(initialFile)) {
+    handleFileOpen(initialFile, { forcePreview: true });
+  } else {
+    createWindow(true);
+  }
   
   // Klavye kısayolları
   globalShortcut.register('CommandOrControl+Shift+R', () => {
@@ -71,25 +196,9 @@ app.whenReady().then(() => {
   // macOS için: dock'tan tıklanınca pencere aç
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
+      createWindow(true);
     }
   });
-
-  // Komut satırından dosya açma desteği (sağ tık entegrasyonu için)
-  const fileArg = process.argv.find(arg => 
-    arg.endsWith('.pdf') || arg.endsWith('.docx') || 
-    arg.endsWith('.xlsx') || arg.endsWith('.txt') || 
-    arg.endsWith('.zip') || arg.endsWith('.jpg') || 
-    arg.endsWith('.jpeg') || arg.endsWith('.png') || 
-    arg.endsWith('.gif') || arg.endsWith('.webp') || 
-    arg.endsWith('.bmp') || arg.endsWith('.udf')
-  );
-  
-  if (fileArg && fs.existsSync(fileArg)) {
-    setTimeout(() => {
-      mainWindow.webContents.send('open-file-path', fileArg);
-    }, 1000);
-  }
 });
 
 // Tüm pencereler kapatılınca uygulamayı kapat (macOS hariç)
@@ -141,6 +250,33 @@ ipcMain.handle("pick-multiple-files", async () => {
   return result.filePaths;
 });
 
+ipcMain.handle("open-full-view", async (_event, filePath) => {
+  const targetPath = filePath && fs.existsSync(filePath) ? filePath : pendingFilePath;
+  if (!targetPath || !fs.existsSync(targetPath)) {
+    return { success: false, error: "Dosya bulunamadı" };
+  }
+
+  pendingFilePath = null;
+
+  if (!mainWindow) {
+    createWindow(true);
+  } else {
+    if (!mainWindow.isVisible()) {
+      mainWindow.show();
+    }
+    mainWindow.focus();
+  }
+
+  sendFileToMainWindow(targetPath);
+
+  if (previewWindow) {
+    previewTransitioning = true;
+    previewWindow.close();
+  }
+
+  return { success: true };
+});
+
 // Dosya içeriğini okuma
 ipcMain.handle("peek-file", async (_event, filePath) => {
   try {
@@ -152,7 +288,9 @@ ipcMain.handle("peek-file", async (_event, filePath) => {
     const ext = path.extname(filePath).toLowerCase().replace(".", "");
     const name = path.basename(filePath);
 
-    let result = { name, type: ext };
+    const stats = fs.statSync(filePath);
+
+    let result = { name, type: ext, size: stats.size, path: filePath };
 
     // PDF dosyası
     if (ext === "pdf") {
@@ -393,6 +531,23 @@ ipcMain.handle("ai-analyze-image", async (_event, base64Data, mimeType) => {
   }
 });
 
+ipcMain.handle("ai-analyze-image-quick", async (_event, base64Data, mimeType) => {
+  try {
+    if (!base64Data || !mimeType) {
+      return { success: false, error: "Resim verisi eksik" };
+    }
+
+    const description = await quickDescribeImage(base64Data, mimeType);
+    return { success: true, description };
+  } catch (error) {
+    console.error("Hızlı resim betimleme hatası:", error);
+    return { 
+      success: false, 
+      error: error.message || "Hızlı betimleme başarısız oldu" 
+    };
+  }
+});
+
 // AI resim soru-cevap
 ipcMain.handle("ai-image-question", async (_event, base64Data, mimeType, question) => {
   try {
@@ -423,23 +578,12 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on("second-instance", (_event, commandLine) => {
-    // Yeni bir dosya açılmaya çalışıldıysa
-    if (mainWindow) {
+    const fileArg = getSupportedFileFromArgs(commandLine);
+    if (fileArg && fs.existsSync(fileArg)) {
+      handleFileOpen(fileArg, { forcePreview: true });
+    } else if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
-
-      const fileArg = commandLine.find(arg => 
-        arg.endsWith('.pdf') || arg.endsWith('.docx') || 
-        arg.endsWith('.xlsx') || arg.endsWith('.txt') || 
-        arg.endsWith('.zip') || arg.endsWith('.jpg') || 
-        arg.endsWith('.jpeg') || arg.endsWith('.png') || 
-        arg.endsWith('.gif') || arg.endsWith('.webp') || 
-        arg.endsWith('.bmp') || arg.endsWith('.udf')
-      );
-      
-      if (fileArg && fs.existsSync(fileArg)) {
-        mainWindow.webContents.send('open-file-path', fileArg);
-      }
     }
   });
 }

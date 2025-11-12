@@ -21,26 +21,21 @@ async function summarize(text) {
 
   try {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    
+
     // Excel mi kontrol et
     const isExcel = text.includes("=== SAYFA");
     
     const prompt = isExcel 
-      ? `Aşağıdaki Excel belgesinin TÜM SAYFALARINI analiz ederek Türkçe özetini çıkar.
-Her sayfa için:
-- Sayfa adı ve içerik türü
-- Sütun başlıkları (varsa)
-- Toplam satır sayısı
-- Önemli bulgular
+      ? `Aşağıdaki Excel dosyasını hızlıca gözden geçir ve sadece tek cümlelik, maksimum 25 kelimelik bir Türkçe özet üret.
+Excel dosyasının sayfa sayısı, kategorisi ve içerik türünü mümkün olduğunca kısaca belirt.
+Çok detay verme, kısa tut.
 
-Excel'de birden fazla sayfa varsa HER BİRİNİ ayrı ayrı özetle.
-
-EXCEL DOSYASI:
+EXCEL ÖZETİ İÇİN METİN:
 ${text}`
-      : `Aşağıdaki belgenin ilk sayfasını Türkçe olarak 3-5 madde halinde özetle. 
-Her madde kısa ve net olsun. Sadece önemli bilgileri içersin.
+      : `Aşağıdaki belgeyi hızlıca analiz et ve en fazla 25 kelimelik, tek cümlelik bir Türkçe betimleme yaz.
+Belgenin genel temasını ve önemli detayını kısaca belirt.
 
-BELGE İÇERİĞİ:
+BELGE ÖZETİ İÇİN METİN:
 ${text}`;
 
     const result = await model.generateContent(prompt);
@@ -50,6 +45,37 @@ ${text}`;
   } catch (error) {
     console.error("Gemini API hatası:", error);
     throw new Error(`AI özetleme başarısız: ${error.message}`);
+  }
+}
+
+/**
+ * Resim için hızlı betimleme (20-25 kelime)
+ */
+async function quickDescribeImage(base64Data, mimeType) {
+  if (!genAI) {
+    throw new Error("Gemini API anahtarı tanımlanmamış. .env dosyasını kontrol edin.");
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const prompt = `Bu resmi hızlıca analiz et ve sadece 20-25 kelimelik bir Türkçe betimleme yaz.
+Betimleme tek cümle olsun ve ana unsurlardan bahsetsin. Çok detay verme.`;
+
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType,
+        },
+      },
+      prompt,
+    ]);
+
+    const response = await result.response;
+    return response.text();
+  } catch (error) {
+    console.error("Gemini hızlı resim betimleme hatası:", error);
+    throw new Error(`Hızlı resim betimleme başarısız: ${error.message}`);
   }
 }
 
@@ -218,5 +244,6 @@ module.exports = {
   summarize,
   askQuestion,
   analyzeImage,
-  askImageQuestion
+  askImageQuestion,
+  quickDescribeImage
 };

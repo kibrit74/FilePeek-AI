@@ -78,3 +78,5 @@ window.addEventListener('DOMContentLoaded', () => {
   console.log('Minimal arayüz hazır!');
 });
 
+
+

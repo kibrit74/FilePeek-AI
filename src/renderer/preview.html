@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FilePeek AI • Hızlı Önizleme</title>
+  <link rel="stylesheet" href="preview.css">
+</head>
+<body>
+  <div class="preview-container">
+    <div class="logo">
+      <div class="logo-icon">
+        <div class="doc-shape"></div>
+        <span class="eye">👁️</span>
+      </div>
+      <h1>FilePeek <span class="ai">AI</span></h1>
+    </div>
+
+    <div class="file-info">
+      <span id="fileTypeChip" class="file-chip">Dosya</span>
+      <h2 id="fileName">Dosya Yükleniyor...</h2>
+      <small id="fileMeta" class="file-meta"></small>
+    </div>
+
+    <div class="summary-card">
+      <div id="summaryLoading" class="summary-loading">
+        <div class="spinner"></div>
+        <p>Hızlı analiz yapılıyor...</p>
+      </div>
+      <div id="summaryError" class="summary-error hidden"></div>
+      <div id="summaryText" class="summary-text hidden"></div>
+    </div>
+
+    <div class="actions">
+      <button id="openFullBtn" class="btn-primary">Detaylı İncele</button>
+      <button id="cancelPreviewBtn" class="btn-secondary">Kapat</button>
+    </div>
+  </div>
+
+  <script src="preview.js"></script>
+</body>
+</html>
+
+
+
