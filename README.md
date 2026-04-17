@@ -13,6 +13,7 @@ Dosyalarınızı açmadan içeriğini görün ve Gemini AI ile analiz edin!
 ## 📋 Desteklenen Dosya Türleri
 
 - PDF (.pdf)
+- UDF(.udf)
 - Word (.docx)
 - Excel (.xlsx, .xls)
 - Metin (.txt, .md, .csv)
