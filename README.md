@@ -1,4 +1,4 @@
-# 🧠 KankaAI - Dosya İçeriği Önizleme ve Yapay Zeka Asistanı
+# 🧠FilePeek-AI - Dosya İçeriği Önizleme ve Yapay Zeka Asistanı
 
 Dosyalarınızı açmadan içeriğini görün ve Gemini AI ile analiz edin!
 
