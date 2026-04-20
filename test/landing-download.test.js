@@ -27,3 +27,13 @@ test("landing page social GitHub link points to the release repository", () => {
   assert.match(landing, /https:\/\/github\.com\/kibrit74\/FilePeek-AI/);
   assert.doesNotMatch(landing, /https:\/\/github\.com\/filepeek\/filepeek-ai/);
 });
+
+test("landing page describes model selection and OpenRouter integration", () => {
+  const landing = readLandingPage();
+
+  assert.match(landing, /Model Seçimi/);
+  assert.match(landing, /OpenRouter/);
+  assert.match(landing, /Gemini/);
+  assert.match(landing, /OpenAI/);
+  assert.match(landing, /Anthropic/);
+});
