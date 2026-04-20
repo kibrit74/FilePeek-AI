@@ -1,0 +1,17 @@
+.git
+.github
+.superpowers
+.worktrees
+node_modules
+dist
+src
+test
+build
+docs
+scripts
+*.log
+*.map
+*.reg
+*.bat
+*.ps1
+package-lock.json
