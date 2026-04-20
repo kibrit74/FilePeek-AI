@@ -7,8 +7,8 @@ test("GitHub release workflow builds Windows installer and portable assets", () 
 
   assert.match(workflow, /tags:\s*\[\s*['"]v\*['"]\s*\]/);
   assert.match(workflow, /npm ci/);
-  assert.match(workflow, /npm run dist:win/);
-  assert.match(workflow, /npm run dist:portable/);
+  assert.match(workflow, /npm run dist:win -- --publish never/);
+  assert.match(workflow, /npm run dist:portable -- --publish never/);
   assert.match(workflow, /softprops\/action-gh-release@v2/);
   assert.match(workflow, /dist\/FilePeek AI Setup 1\.0\.0\.exe/);
   assert.match(workflow, /dist\/FilePeek AI 1\.0\.0\.exe/);
