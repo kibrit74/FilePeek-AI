@@ -11,11 +11,11 @@ test("landing page download buttons target GitHub release assets", () => {
 
   assert.match(
     landing,
-    /https:\/\/github\.com\/kibrit74\/FilePeek-AI\/releases\/latest\/download\/FilePeek%20AI%20Setup%201\.0\.0\.exe/
+    /https:\/\/github\.com\/kibrit74\/FilePeek-AI\/releases\/latest\/download\/FilePeek\.AI\.Setup\.1\.0\.0\.exe/
   );
   assert.match(
     landing,
-    /https:\/\/github\.com\/kibrit74\/FilePeek-AI\/releases\/latest\/download\/FilePeek%20AI%201\.0\.0\.exe/
+    /https:\/\/github\.com\/kibrit74\/FilePeek-AI\/releases\/latest\/download\/FilePeek\.AI\.1\.0\.0\.exe/
   );
   assert.match(landing, /function configureDownloadLinks\(\)/);
   assert.match(landing, /\.download-btn, \.cta-buttons \.btn-primary/);
