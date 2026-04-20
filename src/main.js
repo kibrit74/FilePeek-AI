@@ -1,31 +1,121 @@
 const path = require("path");
+const fs = require("fs");
+const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut, safeStorage, session, shell } = require("electron");
+
+function configureAppStorage() {
+  const userDataPath = path.join(app.getPath("appData"), "FilePeek AI");
+  const sessionDataPath = path.join(userDataPath, "SessionData");
+
+  try {
+    fs.mkdirSync(sessionDataPath, { recursive: true });
+    app.setPath("userData", userDataPath);
+    app.setPath("sessionData", sessionDataPath);
+  } catch (error) {
+    console.warn("Uygulama depolama yolu ayarlanamadi:", error.message);
+  }
+}
+
+configureAppStorage();
+app.commandLine.appendSwitch("disable-http-cache");
+app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 
 // Paketlenmiş uygulamada .env dosyasını doğru konumdan oku
-const envPath = require("electron").app.isPackaged
-  ? path.join(process.resourcesPath, ".env")
-  : path.join(__dirname, "..", ".env");
-
-require("dotenv").config({ path: envPath });
-
-const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut } = require("electron");
-const fs = require("fs");
-const XLSX = require("xlsx");
+if (!app.isPackaged) {
+  require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
+}
+const XLSX = require("@e965/xlsx");
 const JSZip = require("jszip");
 const mammoth = require("mammoth");
 const pdfParse = require("pdf-parse");
 const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require("docx");
-const { summarize, askQuestion, analyzeImage, askImageQuestion, quickDescribeImage } = require("./utils/ai");
+const { createAISettingsStore } = require("./utils/ai-settings-store");
+const { createAIService } = require("./utils/ai-service");
+const { extractWorkbookData, createWorkbookFromSheets } = require("./utils/excel-workbook");
+const { createFileAccessGuard } = require("./utils/file-access-guard");
+const { createLocalSTTService } = require("./utils/local-stt-service");
 
 const SUPPORTED_EXTENSIONS = [
   ".pdf", ".docx", ".xlsx", ".xls", ".txt", ".md", ".csv", ".zip",
   ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".udf"
 ];
+const WORD_SAVE_EXTENSIONS = [".docx"];
+const EXCEL_SAVE_EXTENSIONS = [".xlsx", ".xls"];
+const MAX_FILE_BYTES = 100 * 1024 * 1024;
+const MAX_ZIP_ENTRIES = 2500;
+const MAX_ZIP_UNCOMPRESSED_BYTES = 250 * 1024 * 1024;
 
 let mainWindow;
 let previewWindow = null;
 let pendingFilePath = null;
 let queuedFileToOpen = null;
 let previewTransitioning = false;
+const shouldAutoOpenDevTools = process.env.FILEPEEK_DEBUG === "1" || process.env.ELECTRON_DEBUG === "1";
+
+const aiSettingsStore = createAISettingsStore({
+  filePath: path.join(app.getPath("userData"), "ai-settings.json"),
+  safeStorage,
+});
+
+const aiService = createAIService({
+  settingsStore: aiSettingsStore,
+});
+
+const localSTTService = createLocalSTTService({
+  rootDir: path.join(app.getPath("userData"), "whisper"),
+});
+
+const fileAccessGuard = createFileAccessGuard({
+  supportedExtensions: SUPPORTED_EXTENSIONS,
+  fileExists: fs.existsSync,
+  directoryExists: fs.existsSync,
+});
+
+function configureMediaPermissions(targetWindow) {
+  const allowedPermissions = new Set(["media", "audioCapture"]);
+  const targetSession = targetWindow.webContents.session || session.defaultSession;
+
+  targetSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    const isTargetWindow = webContents === targetWindow.webContents;
+    callback(isTargetWindow && allowedPermissions.has(permission));
+  });
+
+  targetSession.setPermissionCheckHandler((webContents, permission) => {
+    return webContents === targetWindow.webContents && allowedPermissions.has(permission);
+  });
+}
+
+function getZipEntryStats(zip) {
+  const entries = Object.values(zip.files || {});
+  const totalUncompressedSize = entries.reduce((total, file) => {
+    const size = Number(file?._data?.uncompressedSize || 0);
+    return total + (Number.isFinite(size) ? size : 0);
+  }, 0);
+
+  return {
+    entryCount: entries.length,
+    totalUncompressedSize,
+  };
+}
+
+function enforceZipLimits(zip) {
+  const { entryCount, totalUncompressedSize } = getZipEntryStats(zip);
+  if (entryCount > MAX_ZIP_ENTRIES) {
+    throw new Error(`Arsiv cok fazla oge iceriyor (${entryCount}). Limit: ${MAX_ZIP_ENTRIES}`);
+  }
+  if (totalUncompressedSize > MAX_ZIP_UNCOMPRESSED_BYTES) {
+    throw new Error(`Arsiv acildiginda cok buyuk (${Math.round(totalUncompressedSize / 1024 / 1024)} MB). Limit: ${Math.round(MAX_ZIP_UNCOMPRESSED_BYTES / 1024 / 1024)} MB`);
+  }
+}
+
+function getFocusedAppWindow() {
+  return BrowserWindow.getFocusedWindow() || previewWindow || mainWindow || null;
+}
+
+function toggleFocusedWindowDevTools() {
+  const activeWindow = getFocusedAppWindow();
+  if (!activeWindow) return;
+  activeWindow.webContents.toggleDevTools();
+}
 
 // Ana pencereyi oluştur
 function createWindow(show = true) {
@@ -51,6 +141,8 @@ function createWindow(show = true) {
     icon: path.join(__dirname, "../build/icon.png"),
   });
 
+  configureMediaPermissions(mainWindow);
+
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -58,6 +150,9 @@ function createWindow(show = true) {
   mainWindow.once("ready-to-show", () => {
     if (show) {
       mainWindow.show();
+    }
+    if (shouldAutoOpenDevTools) {
+      mainWindow.webContents.openDevTools({ mode: "detach" });
     }
   });
 
@@ -117,22 +212,26 @@ function createPreviewWindow(filePath) {
   previewWindow.loadFile(path.join(__dirname, "renderer", "preview.html"));
 
   previewWindow.webContents.once("did-finish-load", () => {
+    if (shouldAutoOpenDevTools) {
+      previewWindow?.webContents.openDevTools({ mode: "detach" });
+    }
     previewWindow?.webContents.send("preview-open-file", filePath);
   });
 }
 
 function sendFileToMainWindow(filePath) {
-  if (!filePath) return;
+  const approvedPath = fileAccessGuard.approveReadablePath(filePath);
+  if (!approvedPath) return;
 
   if (!mainWindow) {
-    queuedFileToOpen = filePath;
+    queuedFileToOpen = approvedPath;
     return;
   }
 
   if (mainWindow.webContents.isLoading()) {
-    queuedFileToOpen = filePath;
+    queuedFileToOpen = approvedPath;
   } else {
-    mainWindow.webContents.send("open-file-path", filePath);
+    mainWindow.webContents.send("open-file-path", approvedPath);
   }
 }
 
@@ -142,25 +241,26 @@ function getSupportedFileFromArgs(args) {
 }
 
 function handleFileOpen(filePath, { forcePreview = true } = {}) {
-  if (!filePath || !fs.existsSync(filePath)) {
+  const approvedPath = fileAccessGuard.approveReadablePath(filePath);
+  if (!approvedPath) {
     return;
   }
 
-  pendingFilePath = filePath;
+  pendingFilePath = approvedPath;
 
   if (!mainWindow) {
     createWindow(forcePreview ? false : true);
   }
 
   if (!forcePreview) {
-    sendFileToMainWindow(filePath);
+    sendFileToMainWindow(approvedPath);
     if (mainWindow && !mainWindow.isVisible()) {
       mainWindow.show();
     }
     return;
   }
 
-  createPreviewWindow(filePath);
+  createPreviewWindow(approvedPath);
 }
 
 // Uygulama hazır olunca pencereyi aç
@@ -185,12 +285,20 @@ app.whenReady().then(() => {
       mainWindow.reload();
     }
   });
+
+  globalShortcut.register('F12', () => {
+    toggleFocusedWindowDevTools();
+  });
   
   // Ctrl+R ile sayfayı yenile
   globalShortcut.register('CommandOrControl+R', () => {
     if (mainWindow) {
       mainWindow.reload();
     }
+  });
+
+  globalShortcut.register('CommandOrControl+Shift+I', () => {
+    toggleFocusedWindowDevTools();
   });
 
   // macOS için: dock'tan tıklanınca pencere aç
@@ -227,7 +335,7 @@ ipcMain.handle("pick-file", async () => {
     return null;
   }
 
-  return result.filePaths[0];
+  return fileAccessGuard.approveReadablePath(result.filePaths[0]) || null;
 });
 
 // Çoklu dosya seçme dialogu
@@ -247,12 +355,20 @@ ipcMain.handle("pick-multiple-files", async () => {
     return [];
   }
 
-  return result.filePaths;
+  return fileAccessGuard.approveReadablePaths(result.filePaths);
+});
+
+ipcMain.handle("authorize-dropped-file-path", async (_event, filePath) => {
+  return fileAccessGuard.approveReadablePath(filePath) || null;
+});
+
+ipcMain.handle("authorize-recent-file", async (_event, filePath) => {
+  return fileAccessGuard.approveReadablePath(filePath) || null;
 });
 
 ipcMain.handle("open-full-view", async (_event, filePath) => {
-  const targetPath = filePath && fs.existsSync(filePath) ? filePath : pendingFilePath;
-  if (!targetPath || !fs.existsSync(targetPath)) {
+  const targetPath = fileAccessGuard.canRead(filePath) ? fileAccessGuard.normalizePath(filePath) : pendingFilePath;
+  if (!targetPath || !fileAccessGuard.canRead(targetPath)) {
     return { success: false, error: "Dosya bulunamadı" };
   }
 
@@ -280,17 +396,21 @@ ipcMain.handle("open-full-view", async (_event, filePath) => {
 // Dosya içeriğini okuma
 ipcMain.handle("peek-file", async (_event, filePath) => {
   try {
-    if (!fs.existsSync(filePath)) {
+    const approvedPath = fileAccessGuard.normalizePath(filePath);
+    if (!approvedPath || !fileAccessGuard.canRead(approvedPath) || !fs.existsSync(approvedPath)) {
       return { error: "Dosya bulunamadı" };
     }
 
-    const buffer = fs.readFileSync(filePath);
-    const ext = path.extname(filePath).toLowerCase().replace(".", "");
-    const name = path.basename(filePath);
+    const stats = fs.statSync(approvedPath);
+    if (stats.size > MAX_FILE_BYTES) {
+      return { error: `Dosya cok buyuk. Limit: ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB` };
+    }
 
-    const stats = fs.statSync(filePath);
+    const buffer = fs.readFileSync(approvedPath);
+    const ext = path.extname(approvedPath).toLowerCase().replace(".", "");
+    const name = path.basename(approvedPath);
 
-    let result = { name, type: ext, size: stats.size, path: filePath };
+    let result = { name, type: ext, size: stats.size, path: approvedPath };
 
     // PDF dosyası
     if (ext === "pdf") {
@@ -311,59 +431,12 @@ ipcMain.handle("peek-file", async (_event, filePath) => {
     }
     // Excel dosyası
     else if (ext === "xlsx" || ext === "xls") {
-      const workbook = XLSX.read(buffer, { type: "buffer" });
-      const sheetNames = workbook.SheetNames;
-      const firstSheet = workbook.Sheets[sheetNames[0]];
-      
-      result.type = "xlsx";
-      result.sheets = sheetNames;
-      result.rows = firstSheet
-        ? XLSX.utils.sheet_to_json(firstSheet, { header: 1 }).slice(0, 10)
-        : [];
-      
-      // Excel'i metin olarak çevir (AI için - TÜM SAYFALAR - GELİŞMİŞ)
-      let textContent = "";
-      let sampleContent = ""; // Özet için her sayfadan örnek
-      let totalRows = 0;
-      
-      sheetNames.forEach((sheetName, index) => {
-        const sheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        totalRows += jsonData.length;
-        
-        // TÜM VERİ (fullText için) - SATIR NUMARALARI İLE
-        textContent += `\n\n=== SAYFA ${index + 1}: ${sheetName} ===\n`;
-        textContent += `Toplam Satır: ${jsonData.length}\n\n`;
-        
-        jsonData.forEach((row, rowIndex) => {
-          // Satır numarası ekle (Excel gibi 1'den başlasın)
-          const rowNum = rowIndex + 1;
-          textContent += `[Satır ${rowNum}] ${row.join(" | ")}\n`;
-        });
-        
-        // HER SAYFADAN ÖRNEK (sample için - özet için)
-        sampleContent += `\n\n=== SAYFA ${index + 1}: ${sheetName} ===\n`;
-        sampleContent += `Toplam Satır: ${jsonData.length}\n`;
-        
-        const sampleRows = jsonData.slice(0, 25); // Her sayfadan ilk 25 satır
-        sampleRows.forEach((row, rowIndex) => {
-          const rowNum = rowIndex + 1;
-          sampleContent += `[Satır ${rowNum}] ${row.join(" | ")}\n`;
-        });
-        
-        if (jsonData.length > 25) {
-          sampleContent += `... (${jsonData.length - 25} satır daha var)\n`;
-        }
-      });
-      
-      result.fullText = textContent;
-      result.sample = sampleContent;
-      result.totalSheets = sheetNames.length;
-      result.totalRows = totalRows;
+      Object.assign(result, extractWorkbookData(buffer));
     }
     // ZIP dosyası
     else if (ext === "zip") {
       const zip = await JSZip.loadAsync(buffer);
+      enforceZipLimits(zip);
       const entries = [];
       
       zip.forEach((relativePath, file) => {
@@ -397,6 +470,7 @@ ipcMain.handle("peek-file", async (_event, filePath) => {
         // UDF dosyaları genellikle sıkıştırılmış ZIP formatındadır
         const JSZip = require("jszip");
         const zip = await JSZip.loadAsync(buffer);
+        enforceZipLimits(zip);
         
         let extractedText = "";
         let fullText = "";
@@ -479,7 +553,7 @@ ipcMain.handle("ai-summary", async (_event, text) => {
       return { success: false, error: "Özetlenecek metin yok" };
     }
 
-    const summary = await summarize(text);
+    const summary = await aiService.summarize(text);
     return { success: true, summary };
   } catch (error) {
     console.error("AI özetleme hatası:", error);
@@ -501,13 +575,49 @@ ipcMain.handle("ai-question", async (_event, text, question) => {
       return { success: false, error: "Soru girilmedi" };
     }
 
-    const answer = await askQuestion(text, question);
+    const answer = await aiService.askQuestion(text, question);
     return { success: true, answer };
   } catch (error) {
     console.error("AI soru-cevap hatası:", error);
     return { 
       success: false, 
       error: error.message || "Soru cevaplanamadı" 
+    };
+  }
+});
+
+ipcMain.handle("ai-transcribe-audio", async (_event, base64Audio, mimeType) => {
+  try {
+    if (!base64Audio || !mimeType) {
+      return { success: false, error: "Ses verisi eksik" };
+    }
+
+    const audioBuffer = Buffer.from(base64Audio, "base64");
+    const transcript = await localSTTService.transcribeAudio(audioBuffer, mimeType);
+    return { success: true, transcript };
+  } catch (error) {
+    console.error("Lokal ses yazıya çevirme hatası:", error);
+    return {
+      success: false,
+      error: error.message || "Ses yazıya çevrilemedi",
+      needsLocalSTTInstall: error.code === "LOCAL_STT_NOT_READY",
+    };
+  }
+});
+
+ipcMain.handle("local-stt-status", async () => {
+  return localSTTService.getStatus();
+});
+
+ipcMain.handle("local-stt-install", async () => {
+  try {
+    const status = await localSTTService.install();
+    return { success: true, status };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || "Lokal ses tanıma kurulamadı",
+      status: localSTTService.getStatus(),
     };
   }
 });
@@ -520,7 +630,7 @@ ipcMain.handle("ai-analyze-image", async (_event, base64Data, mimeType) => {
     }
 
     const buffer = Buffer.from(base64Data, 'base64');
-    const description = await analyzeImage(buffer, mimeType);
+    const description = await aiService.analyzeImage(buffer, mimeType);
     return { success: true, description };
   } catch (error) {
     console.error("AI resim analizi hatası:", error);
@@ -537,7 +647,7 @@ ipcMain.handle("ai-analyze-image-quick", async (_event, base64Data, mimeType) =>
       return { success: false, error: "Resim verisi eksik" };
     }
 
-    const description = await quickDescribeImage(base64Data, mimeType);
+    const description = await aiService.quickDescribeImage(base64Data, mimeType);
     return { success: true, description };
   } catch (error) {
     console.error("Hızlı resim betimleme hatası:", error);
@@ -560,13 +670,65 @@ ipcMain.handle("ai-image-question", async (_event, base64Data, mimeType, questio
     }
 
     const buffer = Buffer.from(base64Data, 'base64');
-    const answer = await askImageQuestion(buffer, mimeType, question);
+    const answer = await aiService.askImageQuestion(buffer, mimeType, question);
     return { success: true, answer };
   } catch (error) {
     console.error("AI resim soru-cevap hatası:", error);
     return { 
       success: false, 
       error: error.message || "Soru cevaplanamadı" 
+    };
+  }
+});
+
+ipcMain.handle("ai-settings-get", async () => {
+  return aiService.getPublicSettings();
+});
+
+ipcMain.handle("ai-settings-save", async (_event, payload) => {
+  try {
+    const settings = aiService.updateSettings(payload || {});
+    return { success: true, settings };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || "AI ayarları kaydedilemedi",
+    };
+  }
+});
+
+ipcMain.handle("ai-models-list", async (_event, providerId, overrides) => {
+  try {
+    const models = await aiService.listModels(providerId, overrides || {});
+    return { success: true, models };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || "Model listesi alınamadı",
+    };
+  }
+});
+
+ipcMain.handle("ai-provider-test", async (_event, providerId, overrides) => {
+  try {
+    const result = await aiService.testProviderConnection(providerId, overrides || {});
+    return { success: true, result };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || "Sağlayıcı bağlantısı test edilemedi",
+    };
+  }
+});
+
+ipcMain.handle("ollama-pull-model", async (_event, payload) => {
+  try {
+    const result = await aiService.pullOllamaModel(payload || {});
+    return { success: true, result };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || "Ollama modeli indirilemedi",
     };
   }
 });
@@ -591,6 +753,11 @@ if (!gotTheLock) {
 // Word dosyası kaydetme
 ipcMain.handle("save-word", async (_event, filePath, htmlContent) => {
   try {
+    const approvedPath = fileAccessGuard.normalizePath(filePath);
+    if (!fileAccessGuard.canWrite(approvedPath, WORD_SAVE_EXTENSIONS)) {
+      return { success: false, error: "Bu kaydetme konumu kullanici tarafindan onaylanmadi" };
+    }
+
     // HTML içeriğini parse edip Word dosyasına çevir
     const paragraphs = [];
     const tempDiv = htmlContent.split('\n');
@@ -653,7 +820,7 @@ ipcMain.handle("save-word", async (_event, filePath, htmlContent) => {
     });
     
     const buffer = await Packer.toBuffer(doc);
-    fs.writeFileSync(filePath, buffer);
+    fs.writeFileSync(approvedPath, buffer);
     
     return { success: true, message: "Word dosyası kaydedildi!" };
   } catch (error) {
@@ -665,11 +832,15 @@ ipcMain.handle("save-word", async (_event, filePath, htmlContent) => {
 // Excel dosyası kaydetme
 ipcMain.handle("save-excel", async (_event, filePath, data) => {
   try {
-    // data = { sheetName, rows: [[...], [...], ...] }
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.aoa_to_sheet(data.rows);
-    XLSX.utils.book_append_sheet(workbook, worksheet, data.sheetName || "Sheet1");
-    XLSX.writeFile(workbook, filePath);
+    const approvedPath = fileAccessGuard.normalizePath(filePath);
+    if (!fileAccessGuard.canWrite(approvedPath, EXCEL_SAVE_EXTENSIONS)) {
+      return { success: false, error: "Bu kaydetme konumu kullanici tarafindan onaylanmadi" };
+    }
+
+    const workbook = Array.isArray(data?.sheets) && data.sheets.length
+      ? createWorkbookFromSheets(data.sheets)
+      : createWorkbookFromSheets([{ name: data?.sheetName || "Sheet1", rows: data?.rows || [] }]);
+    XLSX.writeFile(workbook, approvedPath);
     
     return { success: true, message: "Excel dosyası kaydedildi!" };
   } catch (error) {
@@ -691,7 +862,34 @@ ipcMain.handle("save-file-dialog", async (_event, defaultPath, filters) => {
     return null;
   }
   
-  return result.filePath;
+  const allowedExtensions = (filters || [])
+    .flatMap(filter => filter?.extensions || [])
+    .filter(extension => extension && extension !== "*")
+    .map(extension => extension.startsWith(".") ? extension : `.${extension}`);
+
+  return fileAccessGuard.approveWritablePath(result.filePath, allowedExtensions) || null;
+});
+
+ipcMain.handle("open-external-url", async (_event, rawUrl) => {
+  try {
+    const safeUrl = String(rawUrl || "").trim();
+    if (!safeUrl) {
+      return { success: false, error: "URL eksik" };
+    }
+
+    const parsed = new URL(safeUrl);
+    if (!["https:"].includes(parsed.protocol)) {
+      return { success: false, error: "Yalnızca güvenli HTTPS adresleri açılabilir" };
+    }
+
+    await shell.openExternal(safeUrl);
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message || "Harici adres açılamadı",
+    };
+  }
 });
 
 // Uygulama kapanırken klavye kısayollarını temizle
@@ -699,4 +897,4 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
-console.log("✅ KankaAI Main Process başlatıldı!");
+console.log("KankaAI Main Process started!");

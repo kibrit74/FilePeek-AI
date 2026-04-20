@@ -1,53 +1,68 @@
-// PDF.js Kütüphanesi - require ile yükle (Electron uyumlu)
-const pdfjsLib = window.pdfjsLib || null;
+﻿// PDF.js Kütüphanesi - require ile yükle (Electron uyumlu)
+let pdfjsLibPromise = null;
+let pdfPreviewDocumentCache = {
+  pdfBase64: "",
+  documentPromise: null,
+};
 
-// PDF.js'i yükle
-if (typeof window !== 'undefined' && !window.pdfjsLib) {
-  const script = document.createElement('script');
-  script.src = '../../node_modules/pdfjs-dist/build/pdf.min.js';
-  script.onload = () => {
-    if (window.pdfjsLib) {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = '../../node_modules/pdfjs-dist/build/pdf.worker.min.js';
-      console.log('✅ PDF.js yüklendi');
-    }
-  };
-  document.head.appendChild(script);
+async function loadPDFJS() {
+  if (window.pdfjsLib?.getDocument) {
+    return window.pdfjsLib;
+  }
+
+  if (!pdfjsLibPromise) {
+    pdfjsLibPromise = import("../../node_modules/pdfjs-dist/build/pdf.mjs").then((module) => {
+      module.GlobalWorkerOptions.workerSrc = new URL(
+        "../../node_modules/pdfjs-dist/build/pdf.worker.mjs",
+        window.location.href
+      ).href;
+      window.pdfjsLib = module;
+      return module;
+    });
+  }
+
+  return pdfjsLibPromise;
 }
 
-// PDF ilk sayfayı render et
-async function renderPDFFirstPage(pdfBase64) {
+function decodePdfBase64(pdfBase64) {
+  const pdfData = atob(pdfBase64);
+  const pdfArray = new Uint8Array(pdfData.length);
+  for (let i = 0; i < pdfData.length; i++) {
+    pdfArray[i] = pdfData.charCodeAt(i);
+  }
+  return pdfArray;
+}
+
+async function getPDFDocument(pdfBase64) {
+  if (!pdfBase64) {
+    throw new Error("PDF verisi eksik.");
+  }
+
+  if (pdfPreviewDocumentCache.pdfBase64 === pdfBase64 && pdfPreviewDocumentCache.documentPromise) {
+    return pdfPreviewDocumentCache.documentPromise;
+  }
+
+  const pdfjsLib = await loadPDFJS();
+  const documentPromise = pdfjsLib.getDocument({
+    data: decodePdfBase64(pdfBase64),
+    isEvalSupported: false,
+    enableScripting: false,
+  }).promise;
+
+  pdfPreviewDocumentCache = {
+    pdfBase64,
+    documentPromise,
+  };
+
+  return documentPromise;
+}
+
+async function renderPDFPage(pdfBase64, pageNumber) {
   try {
-    // PDF.js yüklenene kadar bekle
-    if (!window.pdfjsLib) {
-      await new Promise(resolve => {
-        const checkInterval = setInterval(() => {
-          if (window.pdfjsLib) {
-            clearInterval(checkInterval);
-            resolve();
-          }
-        }, 100);
-        // Maksimum 5 saniye bekle
-        setTimeout(() => {
-          clearInterval(checkInterval);
-          resolve();
-        }, 5000);
-      });
-    }
-    
-    if (!window.pdfjsLib) {
-      console.error('PDF.js yüklenemedi');
-      return null;
-    }
-    
-    const pdfData = atob(pdfBase64);
-    const pdfArray = new Uint8Array(pdfData.length);
-    for (let i = 0; i < pdfData.length; i++) {
-      pdfArray[i] = pdfData.charCodeAt(i);
-    }
-    
-    const loadingTask = window.pdfjsLib.getDocument({ data: pdfArray });
-    const pdf = await loadingTask.promise;
-    const page = await pdf.getPage(1);
+    const pdf = await getPDFDocument(pdfBase64);
+    const totalPages = pdf.numPages || 1;
+    const safePageNumber = Math.min(Math.max(Number(pageNumber) || 1, 1), totalPages);
+    const page = await pdf.getPage(safePageNumber);
     
     const scale = 1.5;
     const viewport = page.getViewport({ scale });
@@ -62,11 +77,86 @@ async function renderPDFFirstPage(pdfBase64) {
       viewport: viewport
     }).promise;
     
-    return canvas.toDataURL('image/png');
+    return {
+      imageUrl: canvas.toDataURL('image/png'),
+      pageNumber: safePageNumber,
+      totalPages,
+    };
   } catch (error) {
     console.error('PDF render hatası:', error);
     return null;
   }
+}
+
+async function setupPDFPreview(pdfBase64, initialPage = 1) {
+  const loadingEl = document.getElementById("pdf-preview-loading");
+  const containerEl = document.getElementById("pdf-preview-container");
+  const prevButton = document.getElementById("pdf-prev-page");
+  const nextButton = document.getElementById("pdf-next-page");
+  const indicator = document.getElementById("pdf-page-indicator");
+  const pageInput = document.getElementById("pdf-page-input");
+
+  if (!loadingEl || !containerEl || !prevButton || !nextButton || !indicator || !pageInput) {
+    return;
+  }
+
+  let currentPage = initialPage;
+  let isRendering = false;
+
+  const renderCurrentPage = async () => {
+    if (isRendering) return;
+    isRendering = true;
+    prevButton.disabled = true;
+    nextButton.disabled = true;
+    loadingEl.style.display = "block";
+    containerEl.style.display = "none";
+
+    const result = await renderPDFPage(pdfBase64, currentPage);
+
+    loadingEl.style.display = "none";
+    containerEl.style.display = "block";
+
+    if (!result) {
+      containerEl.innerHTML = `<p style="color: var(--text-secondary); padding: 20px;">PDF sayfasi goruntulenemedi</p>`;
+      indicator.textContent = "- / -";
+      isRendering = false;
+      return;
+    }
+
+    currentPage = result.pageNumber;
+    indicator.textContent = `${result.pageNumber} / ${result.totalPages}`;
+    pageInput.value = String(result.pageNumber);
+    pageInput.max = String(result.totalPages);
+    prevButton.disabled = result.pageNumber <= 1;
+    nextButton.disabled = result.pageNumber >= result.totalPages;
+    containerEl.innerHTML = `<img src="${result.imageUrl}" style="max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 4px 20px rgba(0,0,0,0.1);" alt="PDF Sayfa ${result.pageNumber}">`;
+    isRendering = false;
+  };
+
+  prevButton.addEventListener("click", () => {
+    if (currentPage <= 1) return;
+    currentPage -= 1;
+    renderCurrentPage();
+  });
+
+  nextButton.addEventListener("click", () => {
+    currentPage += 1;
+    renderCurrentPage();
+  });
+
+  pageInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      const requestedPage = Number(pageInput.value);
+      if (!Number.isFinite(requestedPage)) {
+        pageInput.value = String(currentPage);
+        return;
+      }
+      currentPage = requestedPage;
+      renderCurrentPage();
+    }
+  });
+
+  await renderCurrentPage();
 }
 
 // DOM elemanları
@@ -79,7 +169,10 @@ const preview = document.getElementById("preview");
 const summaryBtn = document.getElementById("summaryBtn");
 const askBtn = document.getElementById("askBtn");
 const questionInput = document.getElementById("questionInput");
+const voiceQuestionBtn = document.getElementById("voiceQuestionBtn");
 const aiResult = document.getElementById("aiResult");
+const aiPanel = document.getElementById("aiPanel");
+const aiPanelToggle = document.getElementById("aiPanelToggle");
 const loading = document.getElementById("loading");
 const loadingText = document.getElementById("loadingText");
 const emptyState = document.querySelector(".empty-state");
@@ -103,9 +196,74 @@ const confirmTranslate = document.getElementById("confirmTranslate");
 const langToggle = document.getElementById("langToggle");
 const langText = document.getElementById("langText");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+const clearRecentFilesBtn = document.getElementById("clearRecentFilesBtn");
 const lightThemeBtn = document.getElementById("lightThemeBtn");
 const darkThemeBtn = document.getElementById("darkThemeBtn");
 const reloadFileBtn = document.getElementById("reloadFileBtn");
+const tabStrip = document.getElementById("tabStrip");
+const toolbarOpenBtn = document.getElementById("toolbarOpenBtn");
+const toolbarReloadBtn = document.getElementById("toolbarReloadBtn");
+const addressField = document.getElementById("addressField");
+const emptyOpenBtn = document.getElementById("emptyOpenBtn");
+const appRoot = document.getElementById("app");
+const sidebar = document.querySelector(".sidebar");
+const sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
+const toolbarLangToggle = document.getElementById("toolbarLangToggle");
+const toolbarLangText = document.getElementById("toolbarLangText");
+const toolbarSettingsBtn = document.getElementById("toolbarSettingsBtn");
+const previewFullscreenBtn = document.getElementById("previewFullscreenBtn");
+const excelFullscreenBtn = document.getElementById("excelFullscreenBtn");
+const fileQuickToolbar = document.getElementById("fileQuickToolbar");
+const uploadPanelTitle = document.querySelector(".upload-panel-header span");
+const dropZoneLabel = dropZone ? dropZone.querySelector("p") : null;
+const recentFilesTitle = document.querySelector(".file-history h4");
+const historySearchInput = document.getElementById("historySearchInput");
+const infoFooterLabel = document.querySelector(".info-footer span");
+const selectedContextBar = document.getElementById("selectedContextBar");
+const selectedContextText = document.getElementById("selectedContextText");
+const askSelectionBtn = document.getElementById("askSelectionBtn");
+const selectionMailBtn = document.getElementById("selectionMailBtn");
+const selectionCalendarBtn = document.getElementById("selectionCalendarBtn");
+const questionContextScopeSelect = document.getElementById("questionContextScopeSelect");
+const clearSelectionContextBtn = document.getElementById("clearSelectionContextBtn");
+const selectionMailModal = document.getElementById("selectionMailModal");
+const closeSelectionMailModal = document.getElementById("closeSelectionMailModal");
+const cancelSelectionMailBtn = document.getElementById("cancelSelectionMailBtn");
+const selectionMailToInput = document.getElementById("selectionMailToInput");
+const selectionMailSubjectInput = document.getElementById("selectionMailSubjectInput");
+const selectionMailBodyInput = document.getElementById("selectionMailBodyInput");
+const selectionMailLanguageSelect = document.getElementById("selectionMailLanguageSelect");
+const selectionMailDetailSelect = document.getElementById("selectionMailDetailSelect");
+const selectionMailGenerateBtn = document.getElementById("selectionMailGenerateBtn");
+const openSelectionMailDraftBtn = document.getElementById("openSelectionMailDraftBtn");
+const selectionCalendarModal = document.getElementById("selectionCalendarModal");
+const closeSelectionCalendarModal = document.getElementById("closeSelectionCalendarModal");
+const cancelSelectionCalendarBtn = document.getElementById("cancelSelectionCalendarBtn");
+const selectionCalendarTitleInput = document.getElementById("selectionCalendarTitleInput");
+const selectionCalendarDateInput = document.getElementById("selectionCalendarDateInput");
+const selectionCalendarStartInput = document.getElementById("selectionCalendarStartInput");
+const selectionCalendarEndInput = document.getElementById("selectionCalendarEndInput");
+const selectionCalendarDetailsInput = document.getElementById("selectionCalendarDetailsInput");
+const selectionCalendarGenerateBtn = document.getElementById("selectionCalendarGenerateBtn");
+const openSelectionCalendarDraftBtn = document.getElementById("openSelectionCalendarDraftBtn");
+const settingsKicker = document.querySelector(".settings-kicker");
+const settingsLead = document.querySelector(".settings-lead");
+const appearanceSettingsTitle = document.getElementById("appearanceSettingsTitle");
+const generalSettingsTitle = document.getElementById("generalSettingsTitle");
+const aiSettingsTitle = document.getElementById("aiSettingsTitle");
+const aboutSettingsTitle = document.getElementById("aboutSettingsTitle");
+const themeModeLabel = document.getElementById("themeModeLabel");
+const colorThemeLabel = document.getElementById("colorThemeLabel");
+const languageLabel = document.getElementById("languageLabel");
+const fileHistoryLabel = document.getElementById("fileHistoryLabel");
+const aiProviderSelect = document.getElementById("aiProviderSelect");
+const aiSettingsStatus = document.getElementById("aiSettingsStatus");
+const saveAISettingsBtn = document.getElementById("saveAISettingsBtn");
+const providerCards = document.querySelectorAll(".provider-card");
+const googleEdgeTitle = document.getElementById("googleEdgeTitle");
+const googleEdgeDescription = document.getElementById("googleEdgeDescription");
+const localSTTStatus = document.getElementById("localSTTStatus");
+const localSTTInstallBtn = document.getElementById("localSTTInstallBtn");
 
 // Çeviri metinleri
 const translations = {
@@ -113,16 +271,26 @@ const translations = {
     pickFile: "Dosya Aç",
     batchProcess: "Toplu İşlem",
     subtitle: "İçini gör, anında",
-    dragDrop: "Dosyayı buraya sürükle bırak",
+    uploadSection: "Dosya Yükleme",
+    dragDrop: "Dosya sürükleyin",
     or: "veya",
     selectFile: "Dosya Seç",
     loading: "Yükleniyor...",
     summary: "Özetle",
+    describe: "Betimle",
+    edit: "Düzenle",
+    translate: "Çevir",
+    read: "Oku",
+    stop: "Durdur",
     ask: "Sor",
     askQuestion: "Soru sor...",
     noFile: "Henüz dosya seçilmedi",
-    recentFiles: "Son Dosyalar",
+    recentFiles: "Son Açılan Dosyalar",
+    emptyHistory: "Henüz dosya açılmadı",
+    privacyNote: "Verileriniz cihazınızda",
     settings: "Ayarlar",
+    settingsKicker: "Tercihler",
+    settingsLead: "Görünüm, dil ve yerel tercihleri tek merkezden yönetin.",
     appearance: "Görünüm",
     themeMode: "Tema Modu",
     light: "Açık",
@@ -132,6 +300,58 @@ const translations = {
     general: "Genel",
     fileHistory: "Dosya Geçmişi",
     clearHistory: "Geçmişi Temizle",
+    clearHistoryConfirm: "Tüm dosya geçmişi silinecek. Emin misiniz?",
+    aiSettings: "AI Sağlayıcıları",
+    aiProvider: "Varsayılan Sağlayıcı",
+    saveAISettings: "AI Ayarlarını Kaydet",
+    aiSettingsIdle: "AI ayarları hazır değil.",
+    aiSettingsSaved: "AI ayarları kaydedildi.",
+    readyStatus: "Hazır.",
+    geminiProvider: "Gemini",
+    refreshModels: "Modelleri Yenile",
+    testConnection: "Bağlantıyı Test Et",
+    apiKey: "API Key",
+    baseUrl: "Base URL",
+    baseUrlDefaultHint: "Normalde değiştirme. OpenRouter için varsayılan adres budur.",
+    textModel: "Metin Modeli",
+    visionModel: "Görsel Modeli",
+    textModelId: "Metin Model ID",
+    visionModelId: "Görsel Model ID",
+    clearSavedKey: "Kayıtlı anahtarı temizle",
+    savedKeyMissing: "Kayıtlı anahtar yok.",
+    savedKeyPresent: "Kayıtlı anahtar: ",
+    savedKeyPlaceholder: "Kayıtlı anahtar var",
+    ollamaOptionalKey: "Yerel Ollama için anahtar gerekmez.",
+    ollamaPullPlaceholder: "Örn: gemma4",
+    pullModel: "Model İndir",
+    modelsLoaded: "Model listesi güncellendi",
+    connectionSuccess: "Bağlantı başarılı",
+    noModelsFound: "Model bulunamadı",
+    googleEdgeTitle: "Google AI Edge / Gemma 4",
+    googleEdgeDescription: "Google AI Edge, ayrı bir on-device runtime ister. Bu sürümde çalışma yolu Ollama + gemma4 olarak bağlı.",
+    fullscreen: "Tam ekran",
+    exitFullscreen: "Tam ekrandan çık",
+    removeFromHistory: "Geçmişten Sil",
+    pinHistory: "Sabitle",
+    unpinHistory: "Sabitlemeyi Kaldır",
+    historySearch: "Dosya ara",
+    selectedContext: "Seçili Metin",
+    selectionScopeLabel: "Soru Bağlamı",
+    selectionScopeSelection: "Yalnızca Seçim",
+    selectionScopeDocument: "Tüm Belge",
+    askSelection: "Seçileni Sor",
+    sendAsMail: "Mail Olarak Gönder",
+    addToCalendar: "Takvime Ekle",
+    selectionQuestionPlaceholder: "Seçili metin hakkında soru sor...",
+    toolbarActions: {
+      summarize: "Özet",
+      translate: "Çevir",
+      read: "Oku",
+      ask: "Soru Sor",
+      edit: "Düzenle",
+      text: "Metin",
+      preview: "Önizleme"
+    },
     about: "Hakkında",
     version: "v1.0.0",
     description: "AI destekli dosya önizleme ve analiz aracı",
@@ -141,16 +361,26 @@ const translations = {
     pickFile: "Open File",
     batchProcess: "Batch Process",
     subtitle: "See inside, instantly",
-    dragDrop: "Drag and drop file here",
+    uploadSection: "File Upload",
+    dragDrop: "Drag a file here",
     or: "or",
     selectFile: "Select File",
     loading: "Loading...",
     summary: "Summarize",
+    describe: "Describe",
+    edit: "Edit",
+    translate: "Translate",
+    read: "Read",
+    stop: "Stop",
     ask: "Ask",
     askQuestion: "Ask a question...",
     noFile: "No file selected yet",
     recentFiles: "Recent Files",
+    emptyHistory: "No files opened yet",
+    privacyNote: "Your data stays on this device",
     settings: "Settings",
+    settingsKicker: "Preferences",
+    settingsLead: "Manage appearance, language, and local preferences from one place.",
     appearance: "Appearance",
     themeMode: "Theme Mode",
     light: "Light",
@@ -160,6 +390,58 @@ const translations = {
     general: "General",
     fileHistory: "File History",
     clearHistory: "Clear History",
+    clearHistoryConfirm: "This will remove all file history. Continue?",
+    aiSettings: "AI Providers",
+    aiProvider: "Default Provider",
+    saveAISettings: "Save AI Settings",
+    aiSettingsIdle: "AI settings are not loaded yet.",
+    aiSettingsSaved: "AI settings saved.",
+    readyStatus: "Ready.",
+    geminiProvider: "Gemini",
+    refreshModels: "Refresh Models",
+    testConnection: "Test Connection",
+    apiKey: "API Key",
+    baseUrl: "Base URL",
+    baseUrlDefaultHint: "Normally leave this as-is. This is the default OpenRouter endpoint.",
+    textModel: "Text Model",
+    visionModel: "Vision Model",
+    textModelId: "Text Model ID",
+    visionModelId: "Vision Model ID",
+    clearSavedKey: "Clear saved key",
+    savedKeyMissing: "No saved key.",
+    savedKeyPresent: "Saved key: ",
+    savedKeyPlaceholder: "Saved key exists",
+    ollamaOptionalKey: "No key is required for local Ollama.",
+    ollamaPullPlaceholder: "Example: gemma4",
+    pullModel: "Pull Model",
+    modelsLoaded: "Model list refreshed",
+    connectionSuccess: "Connection successful",
+    noModelsFound: "No models found",
+    googleEdgeTitle: "Google AI Edge / Gemma 4",
+    googleEdgeDescription: "Google AI Edge requires a separate on-device runtime. In this build, the working Gemma 4 path is Ollama + gemma4.",
+    fullscreen: "Enter fullscreen",
+    exitFullscreen: "Exit fullscreen",
+    removeFromHistory: "Remove from History",
+    pinHistory: "Pin",
+    unpinHistory: "Unpin",
+    historySearch: "Search files",
+    selectedContext: "Selected Text",
+    selectionScopeLabel: "Question Scope",
+    selectionScopeSelection: "Selection Only",
+    selectionScopeDocument: "Full Document",
+    askSelection: "Ask About Selection",
+    sendAsMail: "Send as Mail",
+    addToCalendar: "Add to Calendar",
+    selectionQuestionPlaceholder: "Ask about the selected text...",
+    toolbarActions: {
+      summarize: "Summary",
+      translate: "Translate",
+      read: "Read",
+      ask: "Ask",
+      edit: "Edit",
+      text: "Text",
+      preview: "Preview"
+    },
     about: "About",
     version: "v1.0.0",
     description: "AI-powered file preview and analysis tool",
@@ -167,10 +449,703 @@ const translations = {
   }
 };
 
+const uiIcons = {
+  sparkles: '<svg viewBox="0 0 24 24"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"></path><path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"></path></svg>',
+  pencil: '<svg viewBox="0 0 24 24"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"></path></svg>',
+  spreadsheet: '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M8 4v16M3 10h18"></path><path d="M14 14l4-4"></path><path d="M15 10h3v3"></path></svg>',
+  languages: '<svg viewBox="0 0 24 24"><path d="M5 8h10"></path><path d="M10 4v4c0 4-2 7-5 9"></path><path d="M8 12c1.2 1.9 3 3.7 5 5"></path><path d="M15 6h6"></path><path d="M18 6c0 5-2 9-5 12"></path><path d="M16 16h6"></path></svg>',
+  volume: '<svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path><path d="M18.5 5.5a9 9 0 0 1 0 13"></path></svg>',
+  stop: '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>',
+  searchMessage: '<svg viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 1 1-4.2-7.3"></path><path d="M22 22l-4.3-4.3"></path></svg>',
+  expand: '<svg viewBox="0 0 24 24"><path d="M8 3H3v5"></path><path d="M16 3h5v5"></path><path d="M21 16v5h-5"></path><path d="M8 21H3v-5"></path></svg>',
+  compress: '<svg viewBox="0 0 24 24"><path d="M9 3H3v6"></path><path d="M15 3h6v6"></path><path d="M21 15v6h-6"></path><path d="M3 15v6h6"></path><path d="M8 8 3 3"></path><path d="M16 8l5-5"></path><path d="M8 16l-5 5"></path><path d="m16 16 5 5"></path></svg>'
+};
+
+function getIconMarkup(name, className = "ai-icon") {
+  const icon = uiIcons[name] || "";
+  return `<span class="${className}" aria-hidden="true">${icon}</span>`;
+}
+
+function setButtonContentWithIcon(button, iconName, label, className = "ai-icon") {
+  if (!button) return;
+  button.innerHTML = `${getIconMarkup(iconName, className)}<span>${escapeHtml(label)}</span>`;
+}
+
+function getCurrentTranslation() {
+  return translations[currentLang] || translations.tr;
+}
+
+function getEmptyHistoryMarkup() {
+  const t = getCurrentTranslation();
+  return `<li class="history-empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg><p>${escapeHtml(t.emptyHistory)}</p></li>`;
+}
+
+function getPinnedHistoryPaths() {
+  const rawValue = localStorage.getItem("fileHistoryPinned");
+  if (!rawValue) return [];
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch (error) {
+    console.warn("Pinned history parse edilemedi:", error);
+    return [];
+  }
+}
+
+function savePinnedHistoryPaths(paths) {
+  localStorage.setItem("fileHistoryPinned", JSON.stringify(paths.slice(0, 10)));
+}
+
+function togglePinnedHistory(filePath) {
+  if (!filePath) return;
+  const pinnedPaths = getPinnedHistoryPaths();
+  const nextPinnedPaths = pinnedPaths.includes(filePath)
+    ? pinnedPaths.filter((path) => path !== filePath)
+    : [filePath, ...pinnedPaths.filter((path) => path !== filePath)];
+  savePinnedHistoryPaths(nextPinnedPaths);
+  updateHistoryUI();
+}
+
+function getFilteredHistory() {
+  const normalizedSearch = historySearchTerm.trim().toLocaleLowerCase("tr-TR");
+  const pinnedPaths = new Set(getPinnedHistoryPaths());
+  const history = getFileHistory();
+  const filtered = normalizedSearch
+    ? history.filter((item) => `${item.name || ""} ${item.path || ""}`.toLocaleLowerCase("tr-TR").includes(normalizedSearch))
+    : history.slice();
+
+  return filtered.sort((left, right) => {
+    const leftPinned = pinnedPaths.has(left.path);
+    const rightPinned = pinnedPaths.has(right.path);
+    if (leftPinned !== rightPinned) {
+      return leftPinned ? -1 : 1;
+    }
+    return Number(right.date || 0) - Number(left.date || 0);
+  });
+}
+
+function truncateText(text, limit = 180) {
+  const normalized = String(text || "").trim().replace(/\s+/g, " ");
+  if (normalized.length <= limit) return normalized;
+  return `${normalized.slice(0, limit - 1)}…`;
+}
+
+function sanitizeJsonFence(text) {
+  return String(text || "")
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+}
+
+function parseDraftJson(text, fallback = {}) {
+  try {
+    return JSON.parse(sanitizeJsonFence(text));
+  } catch (_error) {
+    return fallback;
+  }
+}
+
+function openModal(modal) {
+  if (!modal) return;
+  modal.classList.remove("hidden");
+}
+
+function closeModal(modal) {
+  if (!modal) return;
+  modal.classList.add("hidden");
+}
+
+function padTwo(value) {
+  return String(value || "").padStart(2, "0");
+}
+
+function formatGoogleCalendarDate(dateValue, timeValue = "09:00") {
+  const [year, month, day] = String(dateValue || "").split("-");
+  const [hours, minutes] = String(timeValue || "09:00").split(":");
+  return `${year}${month}${day}T${padTwo(hours)}${padTwo(minutes)}00`;
+}
+
+async function openExternalUrl(url) {
+  const result = await window.kankaAPI.openExternalUrl(url);
+  if (!result?.success) {
+    throw new Error(result?.error || "Harici sayfa açılamadı.");
+  }
+}
+
+function getSelectedPreviewContextOrThrow() {
+  if (!selectedPreviewContext) {
+    updateSelectedPreviewContext();
+  }
+
+  if (!selectedPreviewContext) {
+    throw new Error("Önce bir metin seçin.");
+  }
+
+  return selectedPreviewContext;
+}
+
+function getTodayDateValue() {
+  const today = new Date();
+  return `${today.getFullYear()}-${padTwo(today.getMonth() + 1)}-${padTwo(today.getDate())}`;
+}
+
+function openMailDraftModalFromSelection() {
+  let selectedText = "";
+  try {
+    selectedText = getSelectedPreviewContextOrThrow();
+  } catch (error) {
+    showError(error.message || "Mail taslağı hazırlanamadı.");
+    return;
+  }
+
+  if (selectionMailToInput && !selectionMailToInput.value) {
+    selectionMailToInput.value = "";
+  }
+  if (selectionMailSubjectInput && !selectionMailSubjectInput.value.trim()) {
+    selectionMailSubjectInput.value = truncateText(selectedText, 80);
+  }
+  if (selectionMailBodyInput && !selectionMailBodyInput.value.trim()) {
+    selectionMailBodyInput.value = selectedText;
+  }
+
+  openModal(selectionMailModal);
+}
+
+async function requestMailDraftFromSelection() {
+  const selectedText = getSelectedPreviewContextOrThrow();
+  const selectedLanguage = selectionMailLanguageSelect?.value || "tr";
+  const selectedDetail = selectionMailDetailSelect?.value || "normal";
+  const languageInstruction = selectedLanguage === "en"
+    ? "E-posta dili İngilizce olsun."
+    : "E-posta dili Türkçe olsun.";
+  const detailInstruction = {
+    short: "Kısa ve doğrudan yaz.",
+    normal: "Dengeli uzunlukta yaz.",
+    detailed: "Daha detaylı ve bağlam veren bir metin yaz.",
+  }[selectedDetail] || "Dengeli uzunlukta yaz.";
+
+  const prompt = [
+    "Aşağıdaki seçili belge parçasından e-posta taslağı üret.",
+    "JSON dışında hiçbir şey yazma.",
+    'Şema: {"subject":"", "body":""}',
+    "Body sade ve profesyonel olsun.",
+    languageInstruction,
+    detailInstruction,
+    "",
+    selectedText,
+  ].join("\n");
+
+  const result = await window.kankaAPI.aiQuestion(prompt, "Bu seçili metin için mail taslağı oluştur.");
+  if (!result?.success) {
+    throw new Error(result?.error || "Mail taslağı oluşturulamadı.");
+  }
+
+  const draft = parseDraftJson(result.answer, {});
+  selectionMailSubjectInput.value = draft.subject || truncateText(selectedText, 80);
+  selectionMailBodyInput.value = draft.body || selectedText;
+  openModal(selectionMailModal);
+}
+
+function openCalendarDraftModalFromSelection() {
+  let selectedText = "";
+  try {
+    selectedText = getSelectedPreviewContextOrThrow();
+  } catch (error) {
+    showError(error.message || "Takvim taslağı hazırlanamadı.");
+    return;
+  }
+  const fallbackDate = getTodayDateValue();
+
+  if (selectionCalendarTitleInput && !selectionCalendarTitleInput.value.trim()) {
+    selectionCalendarTitleInput.value = truncateText(selectedText, 60);
+  }
+  if (selectionCalendarDateInput && !selectionCalendarDateInput.value) {
+    selectionCalendarDateInput.value = fallbackDate;
+  }
+  if (selectionCalendarStartInput && !selectionCalendarStartInput.value) {
+    selectionCalendarStartInput.value = "09:00";
+  }
+  if (selectionCalendarEndInput && !selectionCalendarEndInput.value) {
+    selectionCalendarEndInput.value = "10:00";
+  }
+  if (selectionCalendarDetailsInput && !selectionCalendarDetailsInput.value.trim()) {
+    selectionCalendarDetailsInput.value = selectedText;
+  }
+
+  openModal(selectionCalendarModal);
+}
+
+async function requestCalendarDraftFromSelection() {
+  const selectedText = getSelectedPreviewContextOrThrow();
+  const fallbackDate = getTodayDateValue();
+  const prompt = [
+    "Aşağıdaki seçili belge parçasından takvim taslağı çıkar.",
+    "JSON dışında hiçbir şey yazma.",
+    'Şema: {"title":"","date":"YYYY-MM-DD","startTime":"HH:MM","endTime":"HH:MM","details":""}',
+    "Tarih emin değilse bugünün tarihini kullanma, boş bırak.",
+    "",
+    selectedText,
+  ].join("\n");
+
+  const result = await window.kankaAPI.aiQuestion(prompt, "Bu seçili metin için takvim etkinliği taslağı çıkar.");
+  if (!result?.success) {
+    throw new Error(result?.error || "Takvim taslağı oluşturulamadı.");
+  }
+
+  const draft = parseDraftJson(result.answer, {});
+  selectionCalendarTitleInput.value = draft.title || truncateText(selectedText, 60);
+  selectionCalendarDateInput.value = /^\d{4}-\d{2}-\d{2}$/.test(draft.date || "") ? draft.date : fallbackDate;
+  selectionCalendarStartInput.value = /^\d{2}:\d{2}$/.test(draft.startTime || "") ? draft.startTime : "09:00";
+  selectionCalendarEndInput.value = /^\d{2}:\d{2}$/.test(draft.endTime || "") ? draft.endTime : "10:00";
+  selectionCalendarDetailsInput.value = draft.details || selectedText;
+  openModal(selectionCalendarModal);
+}
+
+function clearSelectedPreviewContext() {
+  selectedPreviewContext = "";
+  questionContextScope = "selection";
+  if (selectedContextText) {
+    selectedContextText.textContent = "";
+  }
+  if (selectedContextBar) {
+    selectedContextBar.classList.add("hidden");
+  }
+  if (questionInput && document.activeElement !== questionInput) {
+    questionInput.placeholder = getCurrentTranslation().askQuestion;
+  }
+  updateQuestionContextScopeUI();
+}
+
+function updateSelectedPreviewContext(forceText = "") {
+  const selection = window.getSelection();
+  const rawText = forceText || selection?.toString?.() || "";
+  const normalizedText = rawText.replace(/\s+/g, " ").trim();
+
+  if (!normalizedText || !preview?.contains(selection?.anchorNode)) {
+    clearSelectedPreviewContext();
+    return;
+  }
+
+  selectedPreviewContext = normalizedText;
+  if (selectedContextText) {
+    selectedContextText.textContent = truncateText(normalizedText, 220);
+  }
+  if (selectedContextBar) {
+    selectedContextBar.classList.remove("hidden");
+  }
+  setQuestionContextScope("selection");
+  updateQuestionContextScopeUI();
+}
+
+function setQuestionContextScope(scope) {
+  questionContextScope = scope === "document" ? "document" : "selection";
+  if (questionContextScopeSelect) {
+    questionContextScopeSelect.value = questionContextScope;
+  }
+}
+
+function updateQuestionContextScopeUI() {
+  const t = getCurrentTranslation();
+  const usingSelectionScope = shouldUseSelectedContextForQuestion();
+  const scopeLabel = selectedContextBar?.querySelector(".selected-context-scope-label");
+
+  if (scopeLabel) {
+    scopeLabel.textContent = t.selectionScopeLabel;
+  }
+
+  if (questionContextScopeSelect) {
+    questionContextScopeSelect.value = questionContextScope;
+    questionContextScopeSelect.disabled = !selectedPreviewContext;
+    const selectionOption = questionContextScopeSelect.querySelector('option[value="selection"]');
+    const documentOption = questionContextScopeSelect.querySelector('option[value="document"]');
+    if (selectionOption) selectionOption.textContent = t.selectionScopeSelection;
+    if (documentOption) documentOption.textContent = t.selectionScopeDocument;
+  }
+
+  if (questionInput && document.activeElement !== questionInput) {
+    questionInput.placeholder = usingSelectionScope ? t.selectionQuestionPlaceholder : t.askQuestion;
+  }
+}
+
+function shouldUseSelectedContextForQuestion() {
+  return Boolean(selectedPreviewContext) && questionContextScope !== "document";
+}
+
+function getQuestionContextText(question) {
+  if (selectedPreviewContext && shouldUseSelectedContextForQuestion()) {
+    return [
+      "Kullanıcı belge içinden şu bölümü seçti:",
+      selectedPreviewContext,
+      "",
+      `Soru: ${question}`,
+    ].join("\n");
+  }
+
+  if (currentFileData?.isBatch && currentFileData.batchIndex) {
+    return currentFileData.batchIndex.buildQuestionContext(question);
+  }
+
+  if (currentFileData?.type === "xlsx" && window.FilePeekExcelSearch?.buildFocusedExcelQuestionContext) {
+    const focused = window.FilePeekExcelSearch.buildFocusedExcelQuestionContext(currentFileData, question);
+    if (focused?.contextText) {
+      return focused.contextText;
+    }
+  }
+
+  return currentFileData?.fullText || currentFileData?.sample || "";
+}
+
+function getFileQuickActions(fileData) {
+  const t = getCurrentTranslation();
+  const type = getPreviewType(fileData || {});
+  const baseActions = [
+    { id: "summarize", label: t.toolbarActions.summarize },
+    { id: "translate", label: t.toolbarActions.translate },
+    { id: "read", label: t.toolbarActions.read },
+    { id: "ask", label: t.toolbarActions.ask },
+  ];
+
+  if (type === "docx" || type === "xlsx") {
+    baseActions.splice(1, 0, { id: "edit", label: t.toolbarActions.edit });
+  }
+
+  if (type === "pdf") {
+    baseActions.unshift({ id: "preview", label: t.toolbarActions.preview });
+    baseActions.push({ id: "text", label: t.toolbarActions.text });
+  }
+
+  return baseActions;
+}
+
+function renderFileQuickToolbar(fileData) {
+  if (!fileQuickToolbar) return;
+  const actions = getFileQuickActions(fileData);
+
+  if (!fileData || !actions.length) {
+    fileQuickToolbar.classList.add("hidden");
+    fileQuickToolbar.innerHTML = "";
+    return;
+  }
+
+  fileQuickToolbar.classList.remove("hidden");
+  fileQuickToolbar.innerHTML = actions.map((action) => `
+    <button class="file-quick-action" type="button" data-action="${action.id}">
+      ${escapeHtml(action.label)}
+    </button>
+  `).join("");
+}
+
+function refreshActionButtons() {
+  const t = getCurrentTranslation();
+  const wordEditButton = document.getElementById("editWordBtn");
+  const excelEditButton = document.getElementById("editExcelBtn");
+  const summaryLabel = currentFileData?.type === "image" ? t.describe : t.summary;
+  const speakLabel = window.speechSynthesis?.speaking ? t.stop : t.read;
+  const speakIcon = window.speechSynthesis?.speaking ? "stop" : "volume";
+
+  setButtonContentWithIcon(summaryBtn, "sparkles", summaryLabel);
+  setButtonContentWithIcon(wordEditButton, "pencil", t.edit);
+  setButtonContentWithIcon(excelEditButton, "spreadsheet", t.edit);
+  setButtonContentWithIcon(translateBtn, "languages", t.translate);
+  setButtonContentWithIcon(speakBtn, speakIcon, speakLabel);
+  setButtonContentWithIcon(askBtn, "searchMessage", t.ask);
+  updatePreviewFullscreenButton();
+}
+
+function updatePreviewFullscreenButton() {
+  if (!previewFullscreenBtn) return;
+  const t = getCurrentTranslation();
+  const label = isPreviewFullscreen ? t.exitFullscreen : t.fullscreen;
+  previewFullscreenBtn.title = label;
+  previewFullscreenBtn.setAttribute("aria-label", label);
+  previewFullscreenBtn.setAttribute("aria-pressed", String(isPreviewFullscreen));
+  previewFullscreenBtn.innerHTML = `${getIconMarkup(isPreviewFullscreen ? "compress" : "expand", "modal-btn-icon")}<span>${escapeHtml(label)}</span>`;
+}
+
+function setPreviewFullscreen(nextState) {
+  if (!fileInfo) return;
+  isPreviewFullscreen = Boolean(nextState);
+  fileInfo.classList.toggle("is-preview-fullscreen", isPreviewFullscreen);
+  document.body.classList.toggle("preview-fullscreen-open", isPreviewFullscreen);
+  updatePreviewFullscreenButton();
+
+  if (isPreviewFullscreen && preview) {
+    preview.focus({ preventScroll: true });
+  }
+}
+
+const AI_PROVIDER_IDS = ["openai", "anthropic", "openrouter", "gemini", "ollama"];
+const PROVIDER_LABELS = {
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  openrouter: "OpenRouter",
+  gemini: "Gemini",
+  ollama: "Ollama",
+};
+const aiProviderFields = {
+  openai: {
+    apiKeyInput: document.getElementById("openaiApiKey"),
+    apiKeyHint: document.getElementById("openaiApiKeyHint"),
+    baseUrlInput: document.getElementById("openaiBaseUrl"),
+    textModelSelect: document.getElementById("openaiTextModel"),
+    visionModelSelect: document.getElementById("openaiVisionModel"),
+    statusNode: document.getElementById("openaiProviderStatus"),
+    refreshButton: document.getElementById("openaiRefreshModelsBtn"),
+    testButton: document.getElementById("openaiTestBtn"),
+    clearKeyButton: document.getElementById("openaiClearKeyBtn"),
+  },
+  anthropic: {
+    apiKeyInput: document.getElementById("anthropicApiKey"),
+    apiKeyHint: document.getElementById("anthropicApiKeyHint"),
+    baseUrlInput: document.getElementById("anthropicBaseUrl"),
+    textModelSelect: document.getElementById("anthropicTextModel"),
+    visionModelSelect: document.getElementById("anthropicVisionModel"),
+    statusNode: document.getElementById("anthropicProviderStatus"),
+    refreshButton: document.getElementById("anthropicRefreshModelsBtn"),
+    testButton: document.getElementById("anthropicTestBtn"),
+    clearKeyButton: document.getElementById("anthropicClearKeyBtn"),
+  },
+  openrouter: {
+    apiKeyInput: document.getElementById("openrouterApiKey"),
+    apiKeyHint: document.getElementById("openrouterApiKeyHint"),
+    baseUrlInput: document.getElementById("openrouterBaseUrl"),
+    baseUrlHint: document.getElementById("openrouterBaseUrlHint"),
+    textModelSelect: document.getElementById("openrouterTextModel"),
+    visionModelSelect: document.getElementById("openrouterVisionModel"),
+    statusNode: document.getElementById("openrouterProviderStatus"),
+    customTextModelInput: document.getElementById("openrouterCustomTextModel"),
+    customVisionModelInput: document.getElementById("openrouterCustomVisionModel"),
+    refreshButton: document.getElementById("openrouterRefreshModelsBtn"),
+    testButton: document.getElementById("openrouterTestBtn"),
+    clearKeyButton: document.getElementById("openrouterClearKeyBtn"),
+  },
+  gemini: {
+    apiKeyInput: document.getElementById("geminiApiKey"),
+    apiKeyHint: document.getElementById("geminiApiKeyHint"),
+    baseUrlInput: document.getElementById("geminiBaseUrl"),
+    textModelSelect: document.getElementById("geminiTextModel"),
+    visionModelSelect: document.getElementById("geminiVisionModel"),
+    statusNode: document.getElementById("geminiProviderStatus"),
+    refreshButton: document.getElementById("geminiRefreshModelsBtn"),
+    testButton: document.getElementById("geminiTestBtn"),
+    clearKeyButton: document.getElementById("geminiClearKeyBtn"),
+  },
+  ollama: {
+    apiKeyInput: document.getElementById("ollamaApiKey"),
+    apiKeyHint: document.getElementById("ollamaApiKeyHint"),
+    baseUrlInput: document.getElementById("ollamaBaseUrl"),
+    textModelSelect: document.getElementById("ollamaTextModel"),
+    visionModelSelect: document.getElementById("ollamaVisionModel"),
+    statusNode: document.getElementById("ollamaProviderStatus"),
+    refreshButton: document.getElementById("ollamaRefreshModelsBtn"),
+    testButton: document.getElementById("ollamaTestBtn"),
+    clearKeyButton: document.getElementById("ollamaClearKeyBtn"),
+    pullInput: document.getElementById("ollamaPullModelInput"),
+    pullButton: document.getElementById("ollamaPullModelBtn"),
+  }
+};
+
 // Aktif dosya verisi
+let tabState = window.FilePeekTabs.createTabState();
 let currentFileData = null;
 let lastAIResult = null;
 let currentLang = localStorage.getItem("appLang") || "tr";
+let historySearchTerm = "";
+let selectedPreviewContext = "";
+let questionContextScope = "selection";
+let isExcelFullscreen = false;
+let isPreviewFullscreen = false;
+let aiSettingsState = null;
+let aiModelCache = {};
+if (!translations[currentLang]) {
+  currentLang = "tr";
+}
+
+function getActiveDocumentTab() {
+  return window.FilePeekTabs.getActiveTab(tabState);
+}
+
+function syncActiveFileState() {
+  const activeTab = getActiveDocumentTab();
+  currentFileData = activeTab?.data || null;
+  lastAIResult = activeTab?.aiResult || null;
+}
+
+function formatAddress(filePath) {
+  if (!filePath) return "Yeni sekme";
+  const normalized = String(filePath).replace(/\\/g, "/");
+  if (normalized.length <= 86) return normalized;
+  return `.../${normalized.split("/").slice(-3).join("/")}`;
+}
+
+function getFileNameFromPath(filePath) {
+  return String(filePath || "").split(/[\\/]/).pop() || "Dosya";
+}
+
+function inferFileTypeFromPath(filePath) {
+  const ext = getFileNameFromPath(filePath).split(".").pop()?.toLowerCase() || "";
+
+  if (!ext) return "text";
+  if (["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext)) return "image";
+  if (["md", "csv"].includes(ext)) return "text";
+
+  return ext;
+}
+
+function getPreviewType(data = {}) {
+  if (window.FilePeekPreviewModel) {
+    return window.FilePeekPreviewModel.getPreviewType(data);
+  }
+
+  const type = String(data.type || "").toLowerCase();
+
+  if (["text", "txt", "md", "csv"].includes(type)) return "text";
+  if (["image", "jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(type)) return "image";
+  if (["xlsx", "xls"].includes(type)) return "xlsx";
+  if (["pdf", "docx", "zip", "udf"].includes(type)) return type;
+
+  return type || "unknown";
+}
+
+function getReadablePreviewText(data = {}, fallback = "Bu dosya için okunabilir bir içerik bulunamadı.") {
+  if (window.FilePeekPreviewModel) {
+    return window.FilePeekPreviewModel.getReadablePreviewText(data, fallback);
+  }
+
+  const normalized = [data.sample, data.fullText]
+    .map(candidate => (
+      typeof candidate === "string"
+        ? candidate.trim()
+        : String(candidate || "").trim()
+    ))
+    .find(Boolean);
+
+  return normalized || fallback;
+}
+
+function renderTabs() {
+  if (!tabStrip) return;
+
+  const tabsHtml = tabState.openTabs.map(tab => {
+    const activeClass = tab.id === tabState.activeTabId ? " active" : "";
+    const statusClass = tab.status === "loading" ? " loading" : tab.status === "error" ? " error" : "";
+    const icon = tab.status === "error" ? "!" : tab.status === "loading" ? "..." : getFileIcon(tab.type || tab.data?.type || "");
+
+    return `
+      <button class="document-tab${activeClass}${statusClass}" data-tab-id="${escapeAttribute(tab.id)}" title="${escapeAttribute(tab.filePath)}">
+        <span class="tab-file-icon">${icon}</span>
+        <span class="tab-title">${escapeHtml(tab.name)}</span>
+        <span class="tab-close" data-close-tab="${escapeAttribute(tab.id)}" title="Sekmeyi kapat">&times;</span>
+      </button>
+    `;
+  }).join("");
+
+  tabStrip.innerHTML = `${tabsHtml}<button class="new-tab-button" id="newTabButton" title="Yeni dosya aç">+</button>`;
+
+  tabStrip.querySelectorAll(".document-tab").forEach(tabEl => {
+    tabEl.addEventListener("click", () => {
+      tabState = window.FilePeekTabs.setActiveTab(tabState, tabEl.dataset.tabId);
+      renderActiveTab();
+    });
+  });
+
+  tabStrip.querySelectorAll(".tab-close").forEach(closeEl => {
+    closeEl.addEventListener("click", (event) => {
+      event.stopPropagation();
+      tabState = window.FilePeekTabs.closeTab(tabState, closeEl.dataset.closeTab);
+      renderActiveTab();
+    });
+  });
+
+  const newTabButton = tabStrip.querySelector("#newTabButton");
+  if (newTabButton) {
+    newTabButton.addEventListener("click", () => pickFileBtn.click());
+  }
+}
+
+function renderAIResult(aiResultData) {
+  if (!aiResultData) {
+    aiResult.classList.add("hidden");
+    resultTitle.textContent = "";
+    resultContent.textContent = "";
+    return;
+  }
+
+  resultTitle.textContent = aiResultData.title;
+  resultTitle.style.color = aiResultData.isError ? "var(--danger)" : "";
+  resultContent.innerHTML = escapeHtml(aiResultData.content).replace(/\n/g, "<br>");
+  aiResult.classList.remove("hidden");
+  aiResult.style.display = "block";
+  aiResult.style.visibility = "visible";
+  aiResult.style.opacity = "1";
+  aiResult.style.height = "auto";
+}
+
+function renderTabError(tab) {
+  fileName.textContent = tab.name;
+  fileType.textContent = "HATA";
+  fileInfo.classList.remove("hidden");
+  emptyState.classList.add("hidden");
+  preview.innerHTML = `
+    <div class="file-preview-card">
+      <div class="preview-header">
+        <div class="preview-icon txt-icon">!</div>
+        <div class="preview-meta">
+          <h3>Dosya okunamadı</h3>
+          <div class="preview-stats">
+            <span class="stat-badge">${escapeHtml(tab.filePath)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="preview-content">
+        <div class="content-text">${escapeHtml(tab.error || "Bilinmeyen hata")}</div>
+      </div>
+    </div>
+  `;
+  aiResult.classList.add("hidden");
+  updateEditorButtons();
+}
+
+function renderActiveTab() {
+  syncActiveFileState();
+  renderTabs();
+
+  const activeTab = getActiveDocumentTab();
+  if (addressField) {
+    addressField.textContent = formatAddress(activeTab?.filePath);
+    addressField.title = activeTab?.filePath || "Yeni sekme";
+  }
+
+  if (!activeTab) {
+    hideLoading();
+    fileInfo.classList.add("hidden");
+    emptyState.classList.remove("hidden");
+    aiResult.classList.add("hidden");
+    updateEditorButtons();
+    return;
+  }
+
+  if (activeTab.status === "loading") {
+    fileInfo.classList.add("hidden");
+    emptyState.classList.add("hidden");
+    showLoading("Dosya okunuyor...");
+    return;
+  }
+
+  hideLoading();
+
+  if (activeTab.status === "error") {
+    renderTabError(activeTab);
+    return;
+  }
+
+  displayFile(activeTab.data, true, true);
+  renderAIResult(activeTab.aiResult);
+  updateEditorButtons();
+}
 
 // Tema yönetimi
 const savedTheme = localStorage.getItem("theme") || "light";
@@ -193,6 +1168,33 @@ darkThemeBtn.addEventListener("click", () => updateTheme("dark"));
 // İlk yüklemede aktif temayı göster
 updateTheme(savedTheme);
 
+function setSidebarCollapsed(collapsed) {
+  if (!appRoot || !sidebar || !sidebarToggleBtn) return;
+  appRoot.classList.toggle("sidebar-collapsed", collapsed);
+  sidebar.classList.toggle("collapsed", collapsed);
+  sidebarToggleBtn.setAttribute("aria-expanded", String(!collapsed));
+  sidebarToggleBtn.title = collapsed ? "Sol paneli göster" : "Sol paneli gizle";
+}
+
+if (sidebarToggleBtn) {
+  sidebarToggleBtn.addEventListener("click", () => {
+    setSidebarCollapsed(!appRoot.classList.contains("sidebar-collapsed"));
+  });
+}
+
+function setAIPanelCollapsed(collapsed) {
+  if (!aiPanel || !aiPanelToggle) return;
+  aiPanel.classList.toggle("collapsed", collapsed);
+  aiPanelToggle.setAttribute("aria-expanded", String(!collapsed));
+  aiPanelToggle.title = collapsed ? "AI panelini göster" : "AI panelini gizle";
+}
+
+if (aiPanelToggle) {
+  aiPanelToggle.addEventListener("click", () => {
+    setAIPanelCollapsed(!aiPanel.classList.contains("collapsed"));
+  });
+}
+
 // Dosya geçmişi yönetimi
 function getFileHistory() {
   const history = localStorage.getItem("fileHistory");
@@ -208,18 +1210,26 @@ function addToHistory(filePath, fileName, fileType, fileSize) {
   updateHistoryUI();
 }
 
+const batchHistoryActions = window.FilePeekActions?.createBatchHistoryActions?.({ addToHistory });
+
 function updateHistoryUI() {
-  const history = getFileHistory();
+  const history = getFilteredHistory();
+  const t = getCurrentTranslation();
+  const pinnedPaths = new Set(getPinnedHistoryPaths());
   historyList.innerHTML = "";
   
   if (history.length === 0) {
-    historyList.innerHTML = '<li class="history-empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg><p>Henüz dosya açılmadı</p></li>';
+    historyList.innerHTML = getEmptyHistoryMarkup();
     return;
   }
   
-  history.forEach((item, index) => {
+  history.forEach((item) => {
     const li = document.createElement("li");
     li.className = "history-item";
+    if (pinnedPaths.has(item.path)) {
+      li.classList.add("is-pinned");
+    }
+    const iconType = normalizeHistoryFileType(item.type);
     
     // Zaman formatı (örn: "2 saat önce", "Dün", "3 gün önce")
     const timeAgo = formatTimeAgo(item.date);
@@ -228,7 +1238,7 @@ function updateHistoryUI() {
     const fileSize = item.size ? formatFileSize(item.size) : "";
     
     li.innerHTML = `
-      <div class="history-item-icon" data-type="${item.type}">${getFileIcon(item.type)}</div>
+      <div class="history-item-icon" data-type="${iconType}">${getFileIcon(iconType)}</div>
       <div class="history-item-content">
         <div class="history-item-name">${escapeHtml(item.name)}</div>
         <div class="history-item-meta">
@@ -236,17 +1246,38 @@ function updateHistoryUI() {
           <span class="history-time">${timeAgo}</span>
         </div>
       </div>
-      <button class="history-item-delete" onclick="event.stopPropagation(); removeFromHistory(${index});" title="Geçmişten Sil">
+      <button class="history-item-pin" type="button" title="${escapeHtml(pinnedPaths.has(item.path) ? t.unpinHistory : t.pinHistory)}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="m12 17-4 4v-7L4 9l7-5 7 5-4 5v7z"></path>
+        </svg>
+      </button>
+      <button class="history-item-delete" onclick="event.stopPropagation(); removeFromHistoryByPath('${escapeAttribute(item.path)}');" title="${escapeHtml(t.removeFromHistory)}">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="3 6 5 6 21 6"></polyline>
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
         </svg>
       </button>
     `;
-    
-    li.addEventListener("click", () => loadFile(item.path));
+
+    li.querySelector(".history-item-pin")?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      togglePinnedHistory(item.path);
+    });
+    li.addEventListener("click", () => openHistoryItem(item.path));
     historyList.appendChild(li);
   });
+}
+
+function normalizeHistoryFileType(type) {
+  const normalized = String(type || "").toLowerCase();
+  if (["xls", "xlsx"].includes(normalized)) return "xlsx";
+  if (["doc", "docx"].includes(normalized)) return "docx";
+  if (["txt", "text", "md", "csv"].includes(normalized)) return "txt";
+  if (["jpg", "jpeg", "png", "gif", "webp", "bmp", "image"].includes(normalized)) return "image";
+  if (normalized === "pdf") return "pdf";
+  if (normalized === "zip") return "zip";
+  if (normalized === "udf") return "udf";
+  return "file";
 }
 
 function formatFileSize(bytes) {
@@ -271,31 +1302,54 @@ function formatTimeAgo(timestamp) {
   return new Date(timestamp).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
 }
 
-function removeFromHistory(index) {
+function removeFromHistoryByPath(filePath) {
   let history = getFileHistory();
-  history.splice(index, 1);
+  const removedItem = history.find((item) => item.path === filePath);
+  history = history.filter((item) => item.path !== filePath);
   localStorage.setItem("fileHistory", JSON.stringify(history));
+  if (removedItem?.path) {
+    savePinnedHistoryPaths(getPinnedHistoryPaths().filter((path) => path !== removedItem.path));
+  }
   updateHistoryUI();
 }
 
+async function openHistoryItem(filePath) {
+  const approvedPath = await window.kankaAPI.authorizeRecentFile(filePath);
+  if (!approvedPath) {
+    alert("Dosya bulunamadı veya erişim izni yenilenemedi.");
+    return;
+  }
+
+  await loadFile(approvedPath);
+}
+
 // Global erişim için
-window.removeFromHistory = removeFromHistory;
+window.removeFromHistoryByPath = removeFromHistoryByPath;
 
 function getFileIcon(type) {
+  const icon = (paths) => `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
   const icons = {
-    pdf: "📕",
-    docx: "📘",
-    xlsx: "📊",
-    zip: "🗜️",
-    text: "📝",
-    txt: "📝",
-    image: "🖼️",
-    udf: "⚖️"
+    pdf: icon('<path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v5h4M8 14h8M8 17h5"></path>'),
+    docx: icon('<path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v5h4M8 12h8M8 15h8M8 18h5"></path>'),
+    xlsx: icon('<path d="M5 5h14v14H5z"></path><path d="M5 10h14M5 15h14M10 5v14M15 5v14"></path>'),
+    zip: icon('<path d="M4 7h16v12H4z"></path><path d="M8 7V5h4l2 2M11 9v2M11 13v2"></path>'),
+    text: icon('<path d="M6 3h12v18H6z"></path><path d="M9 8h6M9 12h6M9 16h4"></path>'),
+    txt: icon('<path d="M6 3h12v18H6z"></path><path d="M9 8h6M9 12h6M9 16h4"></path>'),
+    image: icon('<rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="m7 16 4-4 3 3 2-2 3 3"></path><circle cx="9" cy="9" r="1.2"></circle>'),
+    udf: icon('<path d="M12 3v18M7 7h10M6 11l-3 5h6l-3-5ZM18 11l-3 5h6l-3-5Z"></path>')
   };
-  return icons[type] || "📄";
+  return icons[type] || icon('<path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v5h4"></path>');
 }
 
 updateHistoryUI();
+renderActiveTab();
+
+if (historySearchInput) {
+  historySearchInput.addEventListener("input", (event) => {
+    historySearchTerm = String(event.target.value || "");
+    updateHistoryUI();
+  });
+}
 
 // Dosya seçme butonu
 pickFileBtn.addEventListener("click", async () => {
@@ -304,6 +1358,18 @@ pickFileBtn.addEventListener("click", async () => {
     await loadFile(filePath, false); // Manuel seçimde otomatik analiz yok
   }
 });
+
+if (toolbarOpenBtn) {
+  toolbarOpenBtn.addEventListener("click", () => pickFileBtn.click());
+}
+
+if (emptyOpenBtn) {
+  emptyOpenBtn.addEventListener("click", () => pickFileBtn.click());
+}
+
+if (toolbarReloadBtn) {
+  toolbarReloadBtn.addEventListener("click", () => reloadActiveFile());
+}
 
 // Drop zone'a tıklama - dosya seçme dialogu aç
 dropZone.addEventListener("click", () => {
@@ -326,7 +1392,12 @@ dropZone.addEventListener("drop", async (e) => {
   
   const files = e.dataTransfer.files;
   if (files.length > 0) {
-    await loadFile(files[0].path);
+    const droppedPath = await window.kankaAPI.getDroppedFilePath(files[0]);
+    if (droppedPath) {
+      await loadFile(droppedPath);
+    } else {
+      pickFileBtn.click();
+    }
   }
 });
 
@@ -345,20 +1416,38 @@ window.kankaAPI.onOpenFile(async (filePath) => {
 
 // Dosya yükleme fonksiyonu
 async function loadFile(filePath, autoAnalyze = false) {
-  showLoading("Dosya okunuyor...");
+  addToHistory(
+    filePath,
+    getFileNameFromPath(filePath),
+    inferFileTypeFromPath(filePath),
+    null
+  );
+
+  const opened = window.FilePeekTabs.openLoadingTab(tabState, filePath);
+  tabState = opened.state;
+  renderActiveTab();
+
+  if (opened.reused) {
+    hideLoading();
+    if (autoAnalyze && currentFileData?.type === "image") {
+      setTimeout(() => summaryBtn.click(), 500);
+    }
+    return;
+  }
   
   try {
     const data = await window.kankaAPI.peekFile(filePath);
     
     if (data.error) {
-      showError(data.error);
+      tabState = window.FilePeekTabs.setTabError(tabState, opened.tab.id, data.error);
+      renderActiveTab();
       return;
     }
     
-    currentFileData = data;
-    currentFileData.fullPath = filePath;
-    displayFile(data);
-    hideLoading();
+    data.fullPath = filePath;
+    addToHistory(data.fullPath, data.name, data.type, data.size);
+    tabState = window.FilePeekTabs.setTabReady(tabState, opened.tab.id, data);
+    renderActiveTab();
     
     // Düzenle butonlarını güncelle
     updateEditorButtons();
@@ -371,14 +1460,19 @@ async function loadFile(filePath, autoAnalyze = false) {
     }
     
   } catch (error) {
-    showError(`Hata: ${error.message}`);
+    tabState = window.FilePeekTabs.setTabError(tabState, opened.tab.id, `Hata: ${error.message}`);
+    renderActiveTab();
   }
 }
 
 // Dosya görüntüleme
-function displayFile(data, keepAIResult = false) {
+function displayFile(data, keepAIResult = false, skipHistory = false) {
+  const previewType = getPreviewType(data);
+  const previewText = getReadablePreviewText(data);
+  clearSelectedPreviewContext();
+
   fileName.textContent = data.name;
-  fileType.textContent = data.type.toUpperCase();
+  fileType.textContent = String(data.type || previewType).toUpperCase();
   
   fileInfo.classList.remove("hidden");
   emptyState.classList.add("hidden");
@@ -389,13 +1483,13 @@ function displayFile(data, keepAIResult = false) {
   }
   
   // Geçmişe ekle (dosya yolu bilgisi varsa)
-  if (data.fullPath) {
+  if (data.fullPath && !skipHistory) {
     addToHistory(data.fullPath, data.name, data.type, data.size);
   }
   
   let previewHtml = "";
   
-  switch (data.type) {
+  switch (previewType) {
     case "pdf":
       const pdfSizeMB = data.size ? (data.size / 1024 / 1024).toFixed(2) : "?";
       previewHtml = `
@@ -425,19 +1519,25 @@ function displayFile(data, keepAIResult = false) {
                 <line x1="16" y1="17" x2="8" y2="17"></line>
                 <line x1="10" y1="9" x2="8" y2="9"></line>
               </svg>
-              İlk Sayfa Önizlemesi
+              PDF Önizleme
             </h4>
+            <div class="pdf-page-controls" style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 14px;">
+              <button id="pdf-prev-page" class="btn-secondary" type="button" style="min-width: 40px; padding: 8px 12px;" aria-label="Önceki sayfa">&larr;</button>
+              <input id="pdf-page-input" type="number" min="1" max="${data.pages}" value="1" style="width: 64px; min-height: 36px; text-align: center; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); font-size: 13px; font-weight: 600;" aria-label="Sayfa numarası">
+              <span id="pdf-page-indicator" style="min-width: 72px; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-secondary);">1 / ${data.pages}</span>
+              <button id="pdf-next-page" class="btn-secondary" type="button" style="min-width: 40px; padding: 8px 12px;" aria-label="Sonraki sayfa">&rarr;</button>
+            </div>
             <div id="pdf-preview-loading" style="text-align: center; padding: 40px; color: var(--text-secondary);">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
                 <circle cx="12" cy="12" r="10" opacity="0.25"></circle>
                 <path d="M12 2a10 10 0 0 1 10 10" opacity="0.75"></path>
               </svg>
-              <p style="margin-top: 16px;">PDF yükleniyor...</p>
+              <p style="margin-top: 16px;">PDF sayfasi yukleniyor...</p>
             </div>
             <div id="pdf-preview-container" style="text-align: center; display: none;"></div>
             <details style="margin-top: 20px;">
-              <summary style="cursor: pointer; font-weight: 500; padding: 8px; background: var(--bg-secondary); border-radius: 6px;">📄 Metin İçeriği</summary>
-              <div class="content-text" style="margin-top: 12px;">${escapeHtml(data.sample)}</div>
+              <summary style="cursor: pointer; font-weight: 500; padding: 8px; background: var(--bg-secondary); border-radius: 6px;">Metin İçeriği</summary>
+              <div class="content-text" style="margin-top: 12px;">${escapeHtml(previewText)}</div>
             </details>
           </div>
         </div>`;
@@ -445,21 +1545,7 @@ function displayFile(data, keepAIResult = false) {
       // PDF render et
       if (data.pdfData) {
         setTimeout(async () => {
-          const pdfImageUrl = await renderPDFFirstPage(data.pdfData);
-          const loadingEl = document.getElementById('pdf-preview-loading');
-          const containerEl = document.getElementById('pdf-preview-container');
-          
-          if (loadingEl && containerEl) {
-            loadingEl.style.display = 'none';
-            
-            if (pdfImageUrl) {
-              containerEl.innerHTML = `<img src="${pdfImageUrl}" style="max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 4px 20px rgba(0,0,0,0.1);" alt="PDF İlk Sayfa">`;
-              containerEl.style.display = 'block';
-            } else {
-              containerEl.innerHTML = `<p style="color: var(--text-secondary); padding: 20px;">PDF önizleme oluşturulamadı</p>`;
-              containerEl.style.display = 'block';
-            }
-          }
+          await setupPDFPreview(data.pdfData, 1);
         }, 100);
       }
       break;
@@ -494,7 +1580,7 @@ function displayFile(data, keepAIResult = false) {
               </svg>
               Belge İçeriği
             </h4>
-            <div class="content-text">${escapeHtml(data.sample)}</div>
+            <div class="content-text">${escapeHtml(previewText)}</div>
           </div>
         </div>`;
       break;
@@ -528,31 +1614,45 @@ function displayFile(data, keepAIResult = false) {
             <div class="preview-meta">
               <h3>Excel Tablosu</h3>
               <div class="preview-stats">
-                <span class="stat-badge">📊 ${data.totalSheets || data.sheets.length} Sayfa</span>
-                <span class="stat-badge">📋 ${data.totalRows || '?'} Satır</span>
-                <span class="stat-badge">💾 ${xlsxSizeMB} MB</span>
+                <span class="stat-badge">${data.totalSheets || data.sheets.length} Sayfa</span>
+                <span class="stat-badge">${data.totalRows || '?'} Satır</span>
+                <span class="stat-badge">${xlsxSizeMB} MB</span>
               </div>
               <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">Sayfalar: ${data.sheets.join(", ")}</p>
             </div>
           </div>
           <div class="preview-content">
-            ${tableHtml}
+            ${tableHtml || `<div class="content-text">${escapeHtml(previewText)}</div>`}
           </div>
         </div>`;
       break;
       
     case "zip":
-      previewHtml = `<strong>ZIP Arşivi</strong><br>
-Toplam ${data.totalFiles} dosya<br><br>
-<ul class="zip-list">`;
+      previewHtml = `
+        <div class="file-preview-card">
+          <div class="preview-header">
+            <div class="preview-icon txt-icon">ZIP</div>
+            <div class="preview-meta">
+              <h3>ZIP Arsivi</h3>
+              <div class="preview-stats">
+                <span class="stat-badge">${data.totalFiles} oge</span>
+              </div>
+            </div>
+          </div>
+          <div class="preview-content">
+            <ul class="zip-list">`;
       data.entries.slice(0, 50).forEach(entry => {
-        const icon = entry.isFolder ? "📁" : "📄";
+        const icon = entry.isFolder ? "[DIR]" : "[FILE]";
         previewHtml += `<li>${icon} ${escapeHtml(entry.name)}</li>`;
       });
       previewHtml += "</ul>";
       if (data.totalFiles > 50) {
         previewHtml += `<p>... ve ${data.totalFiles - 50} dosya daha</p>`;
       }
+      previewHtml += `
+            <div class="content-text" style="margin-top: 16px;">${escapeHtml(previewText)}</div>
+          </div>
+        </div>`;
       break;
       
     case "text":
@@ -589,7 +1689,7 @@ Toplam ${data.totalFiles} dosya<br><br>
               </svg>
               Metin İçeriği
             </h4>
-            <div class="content-text">${escapeHtml(data.sample)}</div>
+            <div class="content-text">${escapeHtml(previewText)}</div>
           </div>
         </div>`;
       break;
@@ -623,7 +1723,7 @@ Toplam ${data.totalFiles} dosya<br><br>
               </svg>
               Belge İçeriği
             </h4>
-            <div class="content-text" style="border-left: 3px solid #8B5CF6; font-family: 'Courier New', monospace;">${escapeHtml(data.sample)}</div>
+            <div class="content-text" style="border-left: 3px solid #8B5CF6; font-family: 'Courier New', monospace;">${escapeHtml(previewText)}</div>
           </div>
         </div>`;
       break;
@@ -657,16 +1757,39 @@ Toplam ${data.totalFiles} dosya<br><br>
           </div>
         </div>`;
       break;
+
+    default:
+      previewHtml = `
+        <div class="file-preview-card">
+          <div class="preview-header">
+            <div class="preview-icon txt-icon">?</div>
+            <div class="preview-meta">
+              <h3>Dosya Onizlemesi</h3>
+              <div class="preview-stats">
+                <span class="stat-badge">${escapeHtml(String(data.type || "BILINMEYEN").toUpperCase())}</span>
+              </div>
+            </div>
+          </div>
+          <div class="preview-content">
+            <div class="content-text">${escapeHtml(previewText)}</div>
+          </div>
+        </div>`;
+      break;
   }
   
   preview.innerHTML = previewHtml;
-  
-  // Resim ise "Özetle" butonunu "Betimle" yap
-  if (data.type === "image") {
-    summaryBtn.textContent = "🖼️ Betimle";
-  } else {
-    summaryBtn.textContent = "✨ Özetle";
+  renderFileQuickToolbar(data);
+
+  if (!preview.dataset.selectionBound) {
+    preview.addEventListener("mouseup", () => {
+      window.requestAnimationFrame(() => updateSelectedPreviewContext());
+    });
+    preview.addEventListener("keyup", () => {
+      window.requestAnimationFrame(() => updateSelectedPreviewContext());
+    });
+    preview.dataset.selectionBound = "true";
   }
+  refreshActionButtons();
 }
 
 // AI Özetleme/Betimleme butonu
@@ -682,7 +1805,7 @@ summaryBtn.addEventListener("click", async () => {
       const result = await window.kankaAPI.aiAnalyzeImage(currentFileData.base64, currentFileData.mimeType);
       
       if (result.success) {
-        showAIResult("🖼️ Resim Betimleme", result.description);
+        showAIResult("Resim Betimleme", result.description);
       } else {
         showError(result.error);
       }
@@ -704,8 +1827,10 @@ summaryBtn.addEventListener("click", async () => {
     aiResult.classList.add("hidden");
     
     try {
-      // SADECE ÖNIZLEME için sample kullan (Excel'de her sayfadan örnek)
-      const text = currentFileData.sample || "";
+      // Batch için ham tüm metin yerine manifest, Excel için mevcut sample kullanılır.
+      const text = currentFileData.isBatch && currentFileData.batchIndex
+        ? currentFileData.batchIndex.summaryContext
+        : currentFileData.sample || "";
       if (!text || text.trim().length === 0) {
         showError("Özetlenecek metin bulunamadı!");
         hideLoading();
@@ -714,7 +1839,9 @@ summaryBtn.addEventListener("click", async () => {
       const result = await window.kankaAPI.aiSummary(text);
       
       if (result.success) {
-        const title = isExcel ? "📊 Excel Özeti (Tüm Sayfalar)" : "📝 İlk Sayfa Özeti";
+        const title = currentFileData.isBatch
+          ? "Toplu Dosya Özeti"
+          : isExcel ? "Excel Özeti (Tüm Sayfalar)" : "İlk Sayfa Özeti";
         showAIResult(title, result.summary);
       } else {
         showError(result.error);
@@ -727,6 +1854,525 @@ summaryBtn.addEventListener("click", async () => {
   }
 });
 
+let questionAudioStream = null;
+let questionMediaRecorder = null;
+let questionAudioChunks = [];
+let questionAudioRecorder = null;
+let questionRecordingFinalizing = false;
+let questionStopTimer = null;
+let browserSpeechRecognition = null;
+let isQuestionListening = false;
+let voiceAnswerPending = false;
+
+function setVoiceQuestionListening(listening) {
+  isQuestionListening = listening;
+  if (!voiceQuestionBtn) return;
+  voiceQuestionBtn.classList.toggle("listening", listening);
+  voiceQuestionBtn.title = listening ? "Dinlemeyi durdur" : "Sesli soru sor";
+  voiceQuestionBtn.setAttribute("aria-label", voiceQuestionBtn.title);
+}
+
+function speakAIAnswerIfNeeded(answer) {
+  if (!voiceAnswerPending) return;
+  voiceAnswerPending = false;
+  speakText(answer);
+}
+
+function handleSuccessfulQuestionAnswer(title, answer) {
+  showAIResult(title, answer);
+  questionInput.value = "";
+  speakAIAnswerIfNeeded(answer);
+}
+
+async function ensureMicrophoneAccess() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Bu cihazda mikrofon erişimi desteklenmiyor.");
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      channelCount: 1,
+    },
+  });
+  return stream;
+}
+
+function getSupportedVoiceMimeType() {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+  ];
+
+  return candidates.find(type => window.MediaRecorder?.isTypeSupported?.(type)) || "";
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = String(reader.result || "");
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error("Ses verisi okunamadi."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function mergeFloat32Chunks(chunks) {
+  const totalLength = chunks.reduce((total, chunk) => total + chunk.length, 0);
+  const merged = new Float32Array(totalLength);
+  let offset = 0;
+
+  chunks.forEach(chunk => {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  });
+
+  return merged;
+}
+
+function downsampleAudioBuffer(buffer, inputSampleRate, outputSampleRate) {
+  if (inputSampleRate === outputSampleRate) {
+    return buffer;
+  }
+
+  const ratio = inputSampleRate / outputSampleRate;
+  const outputLength = Math.max(1, Math.round(buffer.length / ratio));
+  const output = new Float32Array(outputLength);
+
+  for (let i = 0; i < outputLength; i++) {
+    const start = Math.floor(i * ratio);
+    const end = Math.min(Math.floor((i + 1) * ratio), buffer.length);
+    let sum = 0;
+    let count = 0;
+
+    for (let j = start; j < end; j++) {
+      sum += buffer[j];
+      count++;
+    }
+
+    output[i] = count ? sum / count : 0;
+  }
+
+  return output;
+}
+
+function encodeWav(samples, sampleRate) {
+  const bytesPerSample = 2;
+  const blockAlign = bytesPerSample;
+  const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+  const view = new DataView(buffer);
+
+  const writeString = (offset, value) => {
+    for (let i = 0; i < value.length; i++) {
+      view.setUint8(offset + i, value.charCodeAt(i));
+    }
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, samples.length * bytesPerSample, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++) {
+    const sample = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    offset += bytesPerSample;
+  }
+
+  return buffer;
+}
+
+function createWavAudioBlob(chunks, inputSampleRate) {
+  const targetSampleRate = 16000;
+  const merged = mergeFloat32Chunks(chunks);
+  const samples = downsampleAudioBuffer(merged, inputSampleRate, targetSampleRate);
+  return new Blob([encodeWav(samples, targetSampleRate)], { type: "audio/wav" });
+}
+
+function createWavVoiceRecorder(stream) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    throw new Error("Bu cihazda WAV ses kaydı desteklenmiyor.");
+  }
+
+  const audioContext = new AudioContextClass();
+  const source = audioContext.createMediaStreamSource(stream);
+  const processor = audioContext.createScriptProcessor(4096, 1, 1);
+  const chunks = [];
+
+  processor.onaudioprocess = (event) => {
+    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+    event.outputBuffer.getChannelData(0).fill(0);
+  };
+
+  source.connect(processor);
+  processor.connect(audioContext.destination);
+
+  return {
+    async stop() {
+      processor.disconnect();
+      source.disconnect();
+      await audioContext.close();
+      return createWavAudioBlob(chunks, audioContext.sampleRate);
+    },
+  };
+}
+
+function cleanupVoiceQuestionSession() {
+  if (questionStopTimer) {
+    clearTimeout(questionStopTimer);
+    questionStopTimer = null;
+  }
+
+  questionAudioStream?.getTracks().forEach(track => track.stop());
+  questionAudioStream = null;
+  questionMediaRecorder = null;
+  questionAudioChunks = [];
+  questionAudioRecorder = null;
+  questionRecordingFinalizing = false;
+}
+
+function stopVoiceQuestionInput() {
+  if (!isQuestionListening) return;
+  setVoiceQuestionListening(false);
+  questionInput.placeholder = getCurrentTranslation().askQuestion;
+
+  if (questionAudioRecorder) {
+    finalizeRecordedVoiceQuestionInput();
+  } else if (browserSpeechRecognition) {
+    browserSpeechRecognition.stop();
+  } else if (questionMediaRecorder?.state === "recording") {
+    questionMediaRecorder.stop();
+  } else {
+    cleanupVoiceQuestionSession();
+  }
+}
+
+function getBrowserSpeechRecognitionConstructor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function finishVoiceQuestionFromText(transcript) {
+  const question = String(transcript || "").trim();
+  if (!question) {
+    voiceAnswerPending = false;
+    alert("Ses yazıya çevrilemedi.");
+    return;
+  }
+
+  questionInput.value = question;
+  voiceAnswerPending = true;
+  askBtn.click();
+}
+
+function startBrowserVoiceQuestionInput() {
+  const SpeechRecognition = getBrowserSpeechRecognitionConstructor();
+  if (!SpeechRecognition) return false;
+
+  let finalTranscript = "";
+  let browserSpeechHadError = false;
+  browserSpeechRecognition = new SpeechRecognition();
+  browserSpeechRecognition.lang = "tr-TR";
+  browserSpeechRecognition.continuous = false;
+  browserSpeechRecognition.interimResults = true;
+  browserSpeechRecognition.maxAlternatives = 1;
+
+  browserSpeechRecognition.addEventListener("result", (event) => {
+    let interimTranscript = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const transcript = event.results[i]?.[0]?.transcript || "";
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript;
+      } else {
+        interimTranscript += transcript;
+      }
+    }
+    questionInput.value = (finalTranscript || interimTranscript).trim();
+  });
+
+  browserSpeechRecognition.addEventListener("error", (event) => {
+    browserSpeechHadError = true;
+    const shouldUseRecordedFallback = event.error === "network";
+    voiceAnswerPending = false;
+    cleanupVoiceQuestionSession();
+    setVoiceQuestionListening(false);
+    browserSpeechRecognition = null;
+    questionInput.placeholder = getCurrentTranslation().askQuestion;
+
+    if (shouldUseRecordedFallback) {
+      console.warn("Tarayıcı ses tanıma ağ hatası verdi, kayıt tabanlı transkripsiyona geçiliyor.", event);
+      startRecordedVoiceQuestionInput().catch((error) => {
+        voiceAnswerPending = false;
+        cleanupVoiceQuestionSession();
+        setVoiceQuestionListening(false);
+        hideLoading();
+        console.error("Sesli soru fallback başlatılamadı:", error);
+        alert(error.message || "Sesli soru başlatılamadı.");
+      });
+      return;
+    }
+
+    alert(event.error ? `Ses tanıma hatası: ${event.error}` : "Ses tanıma başlatılamadı.");
+  });
+
+  browserSpeechRecognition.addEventListener("end", () => {
+    if (browserSpeechHadError) {
+      return;
+    }
+    const transcript = finalTranscript || questionInput.value;
+    const shouldFinish = isQuestionListening;
+    cleanupVoiceQuestionSession();
+    setVoiceQuestionListening(false);
+    browserSpeechRecognition = null;
+    questionInput.placeholder = getCurrentTranslation().askQuestion;
+
+    if (shouldFinish) {
+      finishVoiceQuestionFromText(transcript);
+    }
+  });
+
+  browserSpeechRecognition.start();
+  voiceQuestionBtn.classList.remove("loading");
+  setVoiceQuestionListening(true);
+  questionInput.placeholder = "Dinleniyor... bitirmek için mikrofona tekrar basın";
+
+  questionStopTimer = setTimeout(() => {
+    if (isQuestionListening) {
+      stopVoiceQuestionInput();
+    }
+  }, 20000);
+
+  return true;
+}
+
+async function startRecordedVoiceQuestionInput() {
+  questionAudioStream = await ensureMicrophoneAccess();
+  questionAudioRecorder = createWavVoiceRecorder(questionAudioStream);
+  voiceQuestionBtn.classList.remove("loading");
+  setVoiceQuestionListening(true);
+  questionInput.placeholder = "Dinleniyor... bitirmek için mikrofona tekrar basın";
+
+  questionStopTimer = setTimeout(() => {
+    if (isQuestionListening) {
+      stopVoiceQuestionInput();
+    }
+  }, 20000);
+}
+
+async function finalizeRecordedVoiceQuestionInput() {
+  if (!questionAudioRecorder || questionRecordingFinalizing) return;
+
+  const recorder = questionAudioRecorder;
+  questionAudioRecorder = null;
+  questionRecordingFinalizing = true;
+
+  if (questionStopTimer) {
+    clearTimeout(questionStopTimer);
+    questionStopTimer = null;
+  }
+
+  setVoiceQuestionListening(false);
+  questionInput.placeholder = getCurrentTranslation().askQuestion;
+
+  try {
+    showLoading("Ses yazıya çevriliyor...");
+    const audioBlob = await recorder.stop();
+    cleanupVoiceQuestionSession();
+    const base64Audio = await blobToBase64(audioBlob);
+    const result = await window.kankaAPI.aiTranscribeAudio(base64Audio, "audio/wav");
+
+    if (result.success) {
+      finishVoiceQuestionFromText(result.transcript);
+    } else {
+      voiceAnswerPending = false;
+      const installHint = result.needsLocalSTTInstall
+        ? " Ayarlar > Lokal Ses Tanıma bölümünden whisper.cpp kurun."
+        : "";
+      alert(`${result.error || "Ses yazıya çevrilemedi."}${installHint}`);
+    }
+  } catch (error) {
+    voiceAnswerPending = false;
+    cleanupVoiceQuestionSession();
+    console.error("Ses yazıya çevirme hatası:", error);
+    alert(error.message || "Ses yazıya çevrilemedi.");
+  } finally {
+    hideLoading();
+    questionInput.placeholder = getCurrentTranslation().askQuestion;
+  }
+}
+
+async function startVoiceQuestionInput() {
+  if (!voiceQuestionBtn) return;
+
+  if (!currentFileData) {
+    alert("Önce bir dosya açın.");
+    return;
+  }
+
+  if (isQuestionListening) {
+    stopVoiceQuestionInput();
+    return;
+  }
+
+  try {
+    await startRecordedVoiceQuestionInput();
+  } catch (error) {
+    if (startBrowserVoiceQuestionInput()) {
+      return;
+    }
+
+    voiceAnswerPending = false;
+    cleanupVoiceQuestionSession();
+    setVoiceQuestionListening(false);
+    voiceQuestionBtn.classList.remove("loading");
+    hideLoading();
+    questionInput.placeholder = getCurrentTranslation().askQuestion;
+    console.error("Sesli soru başlatılamadı:", error);
+    alert(error.message || "Sesli soru başlatılamadı.");
+  }
+}
+
+if (voiceQuestionBtn) {
+  voiceQuestionBtn.addEventListener("click", startVoiceQuestionInput);
+}
+
+if (askSelectionBtn) {
+  askSelectionBtn.addEventListener("click", () => {
+    if (!selectedPreviewContext) {
+      updateSelectedPreviewContext();
+    }
+    setQuestionContextScope("selection");
+    updateQuestionContextScopeUI();
+    questionInput.focus();
+  });
+}
+
+questionContextScopeSelect?.addEventListener("change", (event) => {
+  setQuestionContextScope(event.target.value);
+  updateQuestionContextScopeUI();
+});
+
+if (selectionMailBtn) {
+  selectionMailBtn.addEventListener("click", () => {
+    openMailDraftModalFromSelection();
+  });
+}
+
+if (selectionCalendarBtn) {
+  selectionCalendarBtn.addEventListener("click", () => {
+    openCalendarDraftModalFromSelection();
+  });
+}
+
+selectionMailGenerateBtn?.addEventListener("click", async () => {
+  try {
+    showLoading("Gmail taslağı hazırlanıyor...");
+    await requestMailDraftFromSelection();
+  } catch (error) {
+    showError(error.message || "Mail taslağı hazırlanamadı.");
+  } finally {
+    hideLoading();
+  }
+});
+
+selectionCalendarGenerateBtn?.addEventListener("click", async () => {
+  try {
+    showLoading("Takvim taslağı hazırlanıyor...");
+    await requestCalendarDraftFromSelection();
+  } catch (error) {
+    showError(error.message || "Takvim taslağı hazırlanamadı.");
+  } finally {
+    hideLoading();
+  }
+});
+
+if (clearSelectionContextBtn) {
+  clearSelectionContextBtn.addEventListener("click", () => {
+    clearSelectedPreviewContext();
+  });
+}
+
+[selectionMailModal, selectionCalendarModal].forEach((modal) => {
+  modal?.addEventListener("click", (event) => {
+    if (event.target === modal) {
+      closeModal(modal);
+    }
+  });
+});
+
+closeSelectionMailModal?.addEventListener("click", () => closeModal(selectionMailModal));
+cancelSelectionMailBtn?.addEventListener("click", () => closeModal(selectionMailModal));
+closeSelectionCalendarModal?.addEventListener("click", () => closeModal(selectionCalendarModal));
+cancelSelectionCalendarBtn?.addEventListener("click", () => closeModal(selectionCalendarModal));
+
+openSelectionMailDraftBtn?.addEventListener("click", async () => {
+  const params = new URLSearchParams({
+    view: "cm",
+    fs: "1",
+    to: selectionMailToInput?.value?.trim() || "",
+    su: selectionMailSubjectInput?.value?.trim() || "",
+    body: selectionMailBodyInput?.value?.trim() || "",
+  });
+  const gmailUrl = `https://mail.google.com/mail/?${params.toString()}`;
+  try {
+    await openExternalUrl(gmailUrl);
+    closeModal(selectionMailModal);
+  } catch (error) {
+    showError(error.message || "Gmail taslağı açılamadı.");
+  }
+});
+
+openSelectionCalendarDraftBtn?.addEventListener("click", async () => {
+  const dateValue = selectionCalendarDateInput?.value;
+  const startTime = selectionCalendarStartInput?.value || "09:00";
+  const endTime = selectionCalendarEndInput?.value || "10:00";
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: selectionCalendarTitleInput?.value?.trim() || "",
+    dates: `${formatGoogleCalendarDate(dateValue, startTime)}/${formatGoogleCalendarDate(dateValue, endTime)}`,
+    details: selectionCalendarDetailsInput?.value?.trim() || "",
+  });
+  const calendarUrl = `https://calendar.google.com/calendar/render?${params.toString()}`;
+  try {
+    await openExternalUrl(calendarUrl);
+    closeModal(selectionCalendarModal);
+  } catch (error) {
+    showError(error.message || "Takvim taslağı açılamadı.");
+  }
+});
+
+if (fileQuickToolbar) {
+  fileQuickToolbar.addEventListener("click", (event) => {
+    const actionButton = event.target.closest("[data-action]");
+    if (!actionButton) return;
+
+    const action = actionButton.dataset.action;
+    if (action === "summarize") summaryBtn.click();
+    if (action === "translate") translateBtn.click();
+    if (action === "read") speakBtn.click();
+    if (action === "ask") questionInput.focus();
+    if (action === "edit" && currentFileData?.type === "docx") document.getElementById("editWordBtn")?.click();
+    if (action === "edit" && currentFileData?.type === "xlsx") document.getElementById("editExcelBtn")?.click();
+    if (action === "preview") preview.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (action === "text") preview.querySelector("details")?.setAttribute("open", "open");
+  });
+}
+
 // Soru sorma butonu
 askBtn.addEventListener("click", async () => {
   const question = questionInput.value.trim();
@@ -735,7 +2381,7 @@ askBtn.addEventListener("click", async () => {
   // Excel için özel loading mesajı
   const isExcel = currentFileData.type === "xlsx";
   const loadingMsg = isExcel 
-    ? `AI tüm sayfaları tarıyor (${currentFileData.totalSheets || 1} sayfa, ${currentFileData.totalRows || '?'} satır)...`
+    ? `Excel satırları yerelde aranıyor, sonra AI yanıt hazırlıyor (${currentFileData.totalRows || '?'} satır)...`
     : "AI cevap hazırlıyor...";
   
   showLoading(loadingMsg);
@@ -747,31 +2393,35 @@ askBtn.addEventListener("click", async () => {
       const result = await window.kankaAPI.aiImageQuestion(currentFileData.base64, currentFileData.mimeType, question);
       
       if (result.success) {
-        showAIResult(`💬 Soru: "${question}"`, result.answer);
-        questionInput.value = "";
+        handleSuccessfulQuestionAnswer(`Soru: "${question}"`, result.answer);
       } else {
         showError(result.error);
+        voiceAnswerPending = false;
       }
     } 
     // Metin/belge ise normal soru-cevap
     else {
-      // TÜM DOSYAYI ANALİZ ET - fullText kullan
-      const text = currentFileData.fullText || currentFileData.sample || "";
+      const questionContext = getQuestionContextText(question);
+      const text = questionContext;
+
       if (!text || text.trim().length === 0) {
         showError("Soru sorulacak metin bulunamadı!");
+        voiceAnswerPending = false;
         hideLoading();
         return;
       }
       const result = await window.kankaAPI.aiQuestion(text, question);
       
       if (result.success) {
-        showAIResult(`💬 Soru: "${question}"`, result.answer);
-        questionInput.value = "";
+        handleSuccessfulQuestionAnswer(`Soru: "${question}"`, result.answer);
+        clearSelectedPreviewContext();
       } else {
         showError(result.error);
+        voiceAnswerPending = false;
       }
     }
   } catch (error) {
+    voiceAnswerPending = false;
     showError(`Soru hatası: ${error.message}`);
   } finally {
     hideLoading();
@@ -798,6 +2448,11 @@ function hideLoading() {
 function showAIResult(title, content) {
   console.log("showAIResult çağrıldı:", { title, contentLength: content?.length });
   lastAIResult = { title, content };
+  const activeTab = getActiveDocumentTab();
+  if (activeTab) {
+    tabState = window.FilePeekTabs.setTabAIResult(tabState, activeTab.id, lastAIResult);
+    renderTabs();
+  }
   
   // Başlık ve içeriği ayarla
   resultTitle.textContent = title;
@@ -837,7 +2492,12 @@ function showAIResult(title, content) {
 }
 
 function showError(message) {
-  lastAIResult = null;
+  lastAIResult = { title: "Hata", content: message, isError: true };
+  const activeTab = getActiveDocumentTab();
+  if (activeTab) {
+    tabState = window.FilePeekTabs.setTabAIResult(tabState, activeTab.id, lastAIResult);
+    renderTabs();
+  }
   resultTitle.textContent = "Hata";
   resultTitle.style.color = "var(--danger)";
   resultContent.textContent = message;
@@ -905,21 +2565,19 @@ confirmTranslate.addEventListener("click", async () => {
 let speechSynthesis = window.speechSynthesis;
 let currentUtterance = null;
 
-speakBtn.addEventListener("click", () => {
-  // AI sonucu varsa onu oku, yoksa dosya içeriğini oku
-  const textSource = lastAIResult ? lastAIResult.content : (currentFileData ? (currentFileData.fullText || currentFileData.sample) : null);
-  
+function speakText(textSource) {
   // Eğer konuşma devam ediyorsa durdur
   if (speechSynthesis.speaking) {
     speechSynthesis.cancel();
-    speakBtn.innerHTML = '<span class="ai-icon">🔊</span> Oku';
-    return;
+    refreshActionButtons();
+    return false;
   }
   
   if (!textSource || textSource.length === 0) {
     alert("Okunacak metin bulunamadı!");
-    return;
+    return false;
   }
+
   const textToSpeak = textSource.slice(0, 5000); // İlk 5000 karakter
   
   currentUtterance = new SpeechSynthesisUtterance(textToSpeak);
@@ -928,14 +2586,21 @@ speakBtn.addEventListener("click", () => {
   currentUtterance.pitch = 1.0;
   
   currentUtterance.onstart = () => {
-    speakBtn.innerHTML = '<span class="ai-icon">⏸</span> Durdur';
+    refreshActionButtons();
   };
   
   currentUtterance.onend = () => {
-    speakBtn.innerHTML = '<span class="ai-icon">🔊</span> Oku';
+    refreshActionButtons();
   };
   
   speechSynthesis.speak(currentUtterance);
+  return true;
+}
+
+speakBtn.addEventListener("click", () => {
+  // AI sonucu varsa onu oku, yoksa dosya içeriğini oku
+  const textSource = lastAIResult ? lastAIResult.content : (currentFileData ? (currentFileData.fullText || currentFileData.sample) : null);
+  speakText(textSource);
 });
 
 // Dışa aktarma butonu
@@ -955,10 +2620,317 @@ exportBtn.addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+function setAIStatus(message, tone = "info") {
+  if (!aiSettingsStatus) return;
+  aiSettingsStatus.textContent = message;
+  aiSettingsStatus.dataset.tone = tone;
+}
+
+function setLocalSTTStatus(message, tone = "info") {
+  if (!localSTTStatus) return;
+  localSTTStatus.textContent = message;
+  localSTTStatus.dataset.tone = tone;
+}
+
+function renderLocalSTTStatus(status) {
+  if (!status) {
+    setLocalSTTStatus("Lokal ses tanıma durumu alınamadı.", "error");
+    return;
+  }
+
+  if (status.ready) {
+    setLocalSTTStatus(`Hazır: whisper.cpp + ${status.modelFile}`, "success");
+    if (localSTTInstallBtn) {
+      localSTTInstallBtn.textContent = "Yeniden Kur";
+    }
+    return;
+  }
+
+  const missing = Array.isArray(status.missing) && status.missing.length
+    ? status.missing.join(", ")
+    : "kurulum";
+  setLocalSTTStatus(`Eksik: ${missing}. Sesli soru için whisper.cpp kurulmalı.`, "warning");
+  if (localSTTInstallBtn) {
+    localSTTInstallBtn.textContent = "whisper.cpp Kur";
+  }
+}
+
+async function loadLocalSTTStatus() {
+  if (!window.kankaAPI?.getLocalSTTStatus) return;
+
+  try {
+    const status = await window.kankaAPI.getLocalSTTStatus();
+    renderLocalSTTStatus(status);
+  } catch (error) {
+    setLocalSTTStatus(error.message || "Lokal ses tanıma durumu alınamadı.", "error");
+  }
+}
+
+async function installLocalSTT() {
+  if (!window.kankaAPI?.installLocalSTT || !localSTTInstallBtn) return;
+
+  localSTTInstallBtn.disabled = true;
+  setLocalSTTStatus("whisper.cpp ve ggml-small.bin indiriliyor...", "info");
+
+  try {
+    const result = await window.kankaAPI.installLocalSTT();
+    if (!result.success) {
+      throw new Error(result.error || "Lokal ses tanıma kurulamadı");
+    }
+    renderLocalSTTStatus(result.status);
+  } catch (error) {
+    setLocalSTTStatus(error.message || "Lokal ses tanıma kurulamadı.", "error");
+  } finally {
+    localSTTInstallBtn.disabled = false;
+  }
+}
+
+function setProviderStatus(providerId, message, tone = "info") {
+  const fields = aiProviderFields[providerId];
+  if (!fields?.statusNode) return;
+  fields.statusNode.textContent = message;
+  fields.statusNode.dataset.tone = tone;
+}
+
+function updateProviderCardState() {
+  providerCards.forEach(card => {
+    card.classList.toggle("is-active", card.dataset.provider === aiProviderSelect?.value);
+  });
+}
+
+function getProviderOverrides(providerId) {
+  const fields = aiProviderFields[providerId];
+  if (!fields) return {};
+
+  const overrides = {
+    baseUrl: fields.baseUrlInput?.value?.trim(),
+    model: fields.textModelSelect?.value?.trim(),
+    visionModel: fields.visionModelSelect?.value?.trim(),
+  };
+
+  if (fields.apiKeyInput?.value?.trim()) {
+    overrides.apiKey = fields.apiKeyInput.value.trim();
+  }
+
+  return overrides;
+}
+
+function updateProviderKeyHint(providerId, providerSettings) {
+  const fields = aiProviderFields[providerId];
+  if (!fields?.apiKeyHint) return;
+
+  const t = getCurrentTranslation();
+  if (providerSettings?.apiKeySet && providerSettings?.apiKeyMasked) {
+    fields.apiKeyHint.textContent = `${t.savedKeyPresent}${providerSettings.apiKeyMasked}`;
+    if (fields.apiKeyInput && !fields.apiKeyInput.value) {
+      fields.apiKeyInput.placeholder = `${t.savedKeyPlaceholder} ${providerSettings.apiKeyMasked}`;
+    }
+  } else if (providerId === "ollama") {
+    fields.apiKeyHint.textContent = t.ollamaOptionalKey;
+    if (fields.apiKeyInput && !fields.apiKeyInput.value) {
+      fields.apiKeyInput.placeholder = "ollama cloud için";
+    }
+  } else {
+    fields.apiKeyHint.textContent = t.savedKeyMissing;
+    if (fields.apiKeyInput && !fields.apiKeyInput.value) {
+      fields.apiKeyInput.placeholder = providerId === "gemini"
+        ? "AIza..."
+        : providerId === "anthropic"
+          ? "sk-ant-..."
+          : providerId === "openrouter"
+            ? "sk-or-..."
+            : "sk-...";
+    }
+  }
+}
+
+function populateModelSelect(select, models, selectedValue) {
+  if (!select) return;
+
+  const list = Array.isArray(models) ? models : [];
+  const currentValue = selectedValue || select.value || "";
+  const options = list.length
+    ? list.map(model => {
+        const label = model.supportsVision ? `${model.label} · Vision` : model.label;
+        return `<option value="${escapeHtml(model.id)}">${escapeHtml(label)}</option>`;
+      }).join("")
+    : "";
+
+  if (options) {
+    select.innerHTML = options;
+  } else {
+    select.innerHTML = "";
+  }
+
+  if (currentValue && !list.some(model => model.id === currentValue)) {
+    const fallback = document.createElement("option");
+    fallback.value = currentValue;
+    fallback.textContent = currentValue;
+    select.appendChild(fallback);
+  }
+
+  if (!select.value && select.options.length) {
+    select.selectedIndex = 0;
+  }
+
+  if (currentValue) {
+    select.value = currentValue;
+  }
+}
+
+function applyAISettingsToForm(settings) {
+  if (!settings) return;
+
+  aiSettingsState = settings;
+  aiProviderSelect.value = settings.activeProvider || "openai";
+
+  AI_PROVIDER_IDS.forEach(providerId => {
+    const fields = aiProviderFields[providerId];
+    const provider = settings.providers?.[providerId] || {};
+
+    if (!fields) return;
+    if (fields.baseUrlInput) fields.baseUrlInput.value = provider.baseUrl || "";
+    if (fields.customTextModelInput) fields.customTextModelInput.value = provider.model || "";
+    if (fields.customVisionModelInput) fields.customVisionModelInput.value = provider.visionModel || "";
+    if (fields.apiKeyInput) {
+      fields.apiKeyInput.value = "";
+      fields.apiKeyInput.dataset.clear = "false";
+    }
+
+    updateProviderKeyHint(providerId, provider);
+    populateModelSelect(fields.textModelSelect, aiModelCache[providerId], provider.model);
+    populateModelSelect(fields.visionModelSelect, aiModelCache[providerId], provider.visionModel);
+
+    if (providerId === "ollama" && fields.pullInput) {
+      fields.pullInput.placeholder = getCurrentTranslation().ollamaPullPlaceholder;
+    }
+    setProviderStatus(providerId, getCurrentTranslation().readyStatus);
+  });
+
+  updateProviderCardState();
+}
+
+async function loadAISettings() {
+  try {
+    const settings = await window.kankaAPI.getAISettings();
+    applyAISettingsToForm(settings);
+    setAIStatus(getCurrentTranslation().aiSettingsIdle);
+  } catch (error) {
+    setAIStatus(error.message || "AI ayarları yüklenemedi.", "error");
+  }
+}
+
+function collectAISettingsPayload() {
+  const payload = {
+    activeProvider: aiProviderSelect.value,
+    providers: {},
+  };
+
+  AI_PROVIDER_IDS.forEach(providerId => {
+    const fields = aiProviderFields[providerId];
+    if (!fields) return;
+
+    const nextProvider = {
+      baseUrl: fields.baseUrlInput?.value?.trim() || "",
+      model: fields.customTextModelInput?.value?.trim() || fields.textModelSelect?.value?.trim() || "",
+      visionModel: fields.customVisionModelInput?.value?.trim() || fields.visionModelSelect?.value?.trim() || "",
+    };
+
+    if (fields.apiKeyInput?.dataset.clear === "true") {
+      nextProvider.clearApiKey = true;
+    } else if (fields.apiKeyInput?.value?.trim()) {
+      nextProvider.apiKey = fields.apiKeyInput.value.trim();
+    }
+
+    payload.providers[providerId] = nextProvider;
+  });
+
+  return payload;
+}
+
+async function refreshProviderModels(providerId) {
+  const result = await window.kankaAPI.listAIModels(providerId, getProviderOverrides(providerId));
+  if (!result.success) {
+    throw new Error(result.error || "Model listesi alınamadı");
+  }
+
+  aiModelCache[providerId] = result.models || [];
+  const fields = aiProviderFields[providerId];
+  populateModelSelect(fields.textModelSelect, aiModelCache[providerId], fields.textModelSelect.value);
+  populateModelSelect(fields.visionModelSelect, aiModelCache[providerId], fields.visionModelSelect.value);
+
+  if (!aiModelCache[providerId].length) {
+    setAIStatus(getCurrentTranslation().noModelsFound, "warning");
+    setProviderStatus(providerId, getCurrentTranslation().noModelsFound, "warning");
+  } else {
+    setAIStatus(`${PROVIDER_LABELS[providerId]}: ${getCurrentTranslation().modelsLoaded}`, "success");
+    setProviderStatus(providerId, getCurrentTranslation().modelsLoaded, "success");
+  }
+}
+
+async function testProviderConnection(providerId) {
+  const result = await window.kankaAPI.testAIProvider(providerId, getProviderOverrides(providerId));
+  if (!result.success) {
+    throw new Error(result.error || "Bağlantı testi başarısız");
+  }
+
+  const t = getCurrentTranslation();
+  setAIStatus(`${PROVIDER_LABELS[providerId]}: ${t.connectionSuccess} (${result.result.modelCount})`, "success");
+  setProviderStatus(providerId, `${t.connectionSuccess} (${result.result.modelCount})`, "success");
+}
+
+async function saveAISettings() {
+  const activeProvider = aiProviderSelect?.value || "openai";
+  const response = await window.kankaAPI.saveAISettings(collectAISettingsPayload());
+  if (!response.success) {
+    throw new Error(response.error || "AI ayarları kaydedilemedi");
+  }
+
+  applyAISettingsToForm(response.settings);
+  setAIStatus(getCurrentTranslation().aiSettingsSaved, "success");
+  setProviderStatus(activeProvider, getCurrentTranslation().aiSettingsSaved, "success");
+}
+
+async function pullOllamaModel() {
+  const fields = aiProviderFields.ollama;
+  const modelName = fields.pullInput?.value?.trim();
+  if (!modelName) {
+    setAIStatus(getCurrentTranslation().ollamaPullPlaceholder, "warning");
+    return;
+  }
+
+  const result = await window.kankaAPI.pullOllamaModel({
+    modelName,
+    baseUrl: fields.baseUrlInput?.value?.trim(),
+  });
+
+  if (!result.success) {
+    throw new Error(result.error || "Model indirilemedi");
+  }
+
+  await refreshProviderModels("ollama");
+  fields.pullInput.value = "";
+}
+
 // Ayarlar paneli
 settingsBtn.addEventListener("click", () => {
+  loadAISettings();
+  loadLocalSTTStatus();
   settingsModal.classList.remove("hidden");
 });
+
+if (toolbarSettingsBtn) {
+  toolbarSettingsBtn.addEventListener("click", () => {
+    loadAISettings();
+    loadLocalSTTStatus();
+    settingsModal.classList.remove("hidden");
+  });
+}
+
+if (localSTTInstallBtn) {
+  localSTTInstallBtn.addEventListener("click", installLocalSTT);
+  loadLocalSTTStatus();
+}
 
 closeSettings.addEventListener("click", () => {
   settingsModal.classList.add("hidden");
@@ -969,6 +2941,22 @@ settingsModal.addEventListener("click", (e) => {
     settingsModal.classList.add("hidden");
   }
 });
+
+if (aiProviderSelect) {
+  aiProviderSelect.addEventListener("change", () => {
+    updateProviderCardState();
+  });
+}
+
+if (saveAISettingsBtn) {
+  saveAISettingsBtn.addEventListener("click", async () => {
+    try {
+      await saveAISettings();
+    } catch (error) {
+      setAIStatus(error.message || "AI ayarları kaydedilemedi", "error");
+    }
+  });
+}
 
 // Renk teması değiştirme
 const savedColor = localStorage.getItem("colorTheme") || "blue";
@@ -990,6 +2978,68 @@ colorThemes.forEach(btn => {
 // Dil seçimi (ayarlar modalında)
 langSelect.addEventListener("change", () => {
   updateLanguage(langSelect.value);
+});
+
+AI_PROVIDER_IDS.forEach((providerId) => {
+  const fields = aiProviderFields[providerId];
+  if (!fields) return;
+
+  fields.refreshButton?.addEventListener("click", async () => {
+    try {
+      setAIStatus(`${PROVIDER_LABELS[providerId]} modelleri yükleniyor...`);
+      setProviderStatus(providerId, "Yükleniyor...", "info");
+      await refreshProviderModels(providerId);
+    } catch (error) {
+      setAIStatus(error.message || "Model listesi alınamadı", "error");
+      setProviderStatus(providerId, error.message || "Model listesi alınamadı", "error");
+    }
+  });
+
+  fields.testButton?.addEventListener("click", async () => {
+    try {
+      setAIStatus(`${PROVIDER_LABELS[providerId]} bağlantısı test ediliyor...`);
+      setProviderStatus(providerId, "Bağlantı test ediliyor...", "info");
+      await testProviderConnection(providerId);
+    } catch (error) {
+      setAIStatus(error.message || "Bağlantı testi başarısız", "error");
+      setProviderStatus(providerId, error.message || "Bağlantı testi başarısız", "error");
+    }
+  });
+
+  fields.clearKeyButton?.addEventListener("click", () => {
+    if (fields.apiKeyInput) {
+      fields.apiKeyInput.value = "";
+      fields.apiKeyInput.dataset.clear = "true";
+      updateProviderKeyHint(providerId, { apiKeySet: false, apiKeyMasked: "" });
+      setAIStatus(`${PROVIDER_LABELS[providerId]} anahtarı kaydedildiğinde temizlenecek.`, "warning");
+      setProviderStatus(providerId, "Anahtar kaydedildiğinde temizlenecek.", "warning");
+    }
+  });
+
+  fields.apiKeyInput?.addEventListener("input", () => {
+    fields.apiKeyInput.dataset.clear = "false";
+  });
+
+  fields.textModelSelect?.addEventListener("change", () => {
+    if (fields.customTextModelInput && fields.textModelSelect.value) {
+      fields.customTextModelInput.value = fields.textModelSelect.value;
+    }
+  });
+
+  fields.visionModelSelect?.addEventListener("change", () => {
+    if (fields.customVisionModelInput && fields.visionModelSelect.value) {
+      fields.customVisionModelInput.value = fields.visionModelSelect.value;
+    }
+  });
+});
+
+aiProviderFields.ollama.pullButton?.addEventListener("click", async () => {
+  try {
+    setAIStatus("Ollama modeli indiriliyor...");
+    await pullOllamaModel();
+  } catch (error) {
+    setAIStatus(error.message || "Ollama modeli indirilemedi", "error");
+  }
 });
 
 // Toplu işlem
@@ -1021,23 +3071,29 @@ batchBtn.addEventListener("click", async () => {
       
       if (data.error) {
         console.error(`Dosya okuma hatası: ${fileName}`, data.error);
-        allFilesContent.push(`\n❌ ${fileName}\nHata: ${data.error}`);
+        allFilesContent.push(`\n${fileName}\nHata: ${data.error}`);
         errorCount++;
         continue;
       }
       
       const text = data.fullText || data.sample;
       if (!text || text.trim().length === 0) {
-        allFilesContent.push(`\n❌ ${fileName}\nHata: Dosya içeriği boş`);
+        allFilesContent.push(`\n${fileName}\nHata: Dosya içeriği boş`);
         errorCount++;
         continue;
+      }
+
+      if (batchHistoryActions) {
+        batchHistoryActions.addReadFileToHistory(filePath, data);
+      } else {
+        addToHistory(filePath, data.name || fileName, data.type, data.size);
       }
       
       // Dosya içeriğini listeye ekle (Excel ve UDF için özel format)
       if (data.type === 'xlsx' && data.rows && data.rows.length > 0) {
         // Excel dosyası - tablo olarak ekle
         let excelHtml = `<div style="margin-bottom: 30px;">`;
-        excelHtml += `<h3 style="color: var(--primary); margin-bottom: 10px;">📊 ${fileName}</h3>`;
+        excelHtml += `<h3 style="color: var(--primary); margin-bottom: 10px;">${fileName}</h3>`;
         excelHtml += `<p style="color: var(--text-secondary); margin-bottom: 10px;">Sayfalar: ${data.sheets.join(", ")}</p>`;
         excelHtml += `<table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">`;
         
@@ -1058,24 +3114,24 @@ batchBtn.addEventListener("click", async () => {
       } else if (data.type === 'udf') {
         // UDF dosyası - özel stil ile göster
         let udfHtml = `<div style="margin-bottom: 30px;">`;
-        udfHtml += `<h3 style="color: #8B5CF6; margin-bottom: 10px;">⚖️ ${fileName}</h3>`;
+        udfHtml += `<h3 style="color: #8B5CF6; margin-bottom: 10px;">${fileName}</h3>`;
         udfHtml += `<div style="padding: 12px; background: rgba(139, 92, 246, 0.05); border-left: 3px solid #8B5CF6; border-radius: 8px; white-space: pre-wrap; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto;">`;
         udfHtml += escapeHtml(text.substring(0, 2000)) + (text.length > 2000 ? "\n..." : "");
         udfHtml += `</div></div>`;
         allFilesContent.push(udfHtml);
       } else {
         // Diğer dosyalar - metin olarak ekle
-        allFilesContent.push(`\n📄 ${fileName}\n${"═".repeat(60)}\n${text.substring(0, 1000)}${text.length > 1000 ? "\n..." : ""}`);
+        allFilesContent.push(`\n${fileName}\n${"-".repeat(60)}\n${text.substring(0, 1000)}${text.length > 1000 ? "\n..." : ""}`);
       }
       
       allFilesData.push({ fileName, data, text });
       successCount++;
       
-      console.log(`✅ Dosya okundu: ${fileName}`);
+      console.log(`Dosya okundu: ${fileName}`);
       
     } catch (error) {
       console.error(`İşlem hatası: ${fileName}`, error);
-      allFilesContent.push(`\n❌ ${fileName}\nHata: ${error.message}`);
+      allFilesContent.push(`\n${fileName}\nHata: ${error.message}`);
       errorCount++;
     }
   }
@@ -1105,14 +3161,20 @@ batchBtn.addEventListener("click", async () => {
     
     // Tüm dosyaların tam metnini birleştir (Özetle/Sor butonları için)
     const allTexts = allFilesData.map(item => `=== ${item.fileName} ===\n${item.text}`).join('\n\n');
+    const batchIndexCandidate = window.FilePeekActions?.createBatchDocumentIndex
+      ? window.FilePeekActions.createBatchDocumentIndex(allFilesData)
+      : null;
+    const batchIndex = batchIndexCandidate?.documents?.length ? batchIndexCandidate : null;
+    const batchSummaryContext = batchIndex?.summaryContext || allTexts.substring(0, 2000);
     
     // Global değişkene kaydet (Özetle/Sor butonları kullanacak)
     currentFileData = {
       name: `${allFilesData.length} Dosya`,
       type: "toplu",
       fullText: allTexts,
-      sample: allTexts.substring(0, 2000),
+      sample: batchSummaryContext,
       isBatch: true,
+      batchIndex,
       files: allFilesData
     };
   }
@@ -1125,16 +3187,22 @@ batchBtn.addEventListener("click", async () => {
   
   // Bilgi mesajı göster (AI analizi YOK)
   showAIResult(
-    `📋 ${successCount} Dosya Hazır`,
-    `Toplu işlem tamamlandı!\n\n✅ ${successCount} dosya başarıyla okundu\n${errorCount > 0 ? `❌ ${errorCount} dosya hatalı\n` : ''}\n💡 Analiz yapmak için "Özetle" veya "Sor" butonuna basın.`
+    `${successCount} Dosya Hazır`,
+    `Toplu işlem tamamlandı!\n\n${successCount} dosya başarıyla okundu\n${errorCount > 0 ? `${errorCount} dosya hatalı\n` : ''}\nAnaliz yapmak için "Özetle" veya "Sor" butonuna basın.`
   );
 });
 
 // Dil değiştirme
 function updateLanguage(lang) {
+  if (!translations[lang]) {
+    lang = "tr";
+  }
   currentLang = lang;
   localStorage.setItem("appLang", lang);
   langText.textContent = lang.toUpperCase();
+  if (toolbarLangText) {
+    toolbarLangText.textContent = lang.toUpperCase();
+  }
   
   // Ayarlar modalındaki select'i de güncelle
   langSelect.value = lang;
@@ -1143,36 +3211,110 @@ function updateLanguage(lang) {
   
   // Butonları güncelle
   pickFileBtn.innerHTML = `<span class="btn-icon">+</span> ${t.pickFile}`;
-  batchBtn.innerHTML = `<span class="btn-icon">📚</span> ${t.batchProcess}`;
+  batchBtn.innerHTML = `<span class="btn-icon">=</span> ${t.batchProcess}`;
   document.querySelector(".subtitle").textContent = t.subtitle;
-  summaryBtn.innerHTML = `<span class="ai-icon">📝</span> ${t.summary}`;
-  askBtn.innerHTML = `<span class="ai-icon">💬</span> ${t.ask}`;
-  questionInput.placeholder = t.askQuestion;
+  if (uploadPanelTitle) uploadPanelTitle.textContent = t.uploadSection;
+  if (dropZoneLabel) dropZoneLabel.textContent = t.dragDrop;
+  if (recentFilesTitle) recentFilesTitle.textContent = t.recentFiles;
+  if (historySearchInput) historySearchInput.placeholder = t.historySearch;
+  if (clearRecentFilesBtn) {
+    clearRecentFilesBtn.title = t.clearHistory;
+    clearRecentFilesBtn.setAttribute("aria-label", t.clearHistory);
+  }
+  if (infoFooterLabel) infoFooterLabel.textContent = t.privacyNote;
+  questionInput.placeholder = shouldUseSelectedContextForQuestion() ? t.selectionQuestionPlaceholder : t.askQuestion;
+  if (selectedContextBar && selectedContextText) {
+    const selectedContextLabel = selectedContextBar.querySelector(".selected-context-label");
+    if (selectedContextLabel) selectedContextLabel.textContent = t.selectedContext;
+  }
+  const selectedContextScopeLabel = selectedContextBar?.querySelector(".selected-context-scope-label");
+  if (selectedContextScopeLabel) selectedContextScopeLabel.textContent = t.selectionScopeLabel;
+  if (questionContextScopeSelect) {
+    const selectionOption = questionContextScopeSelect.querySelector('option[value="selection"]');
+    const documentOption = questionContextScopeSelect.querySelector('option[value="document"]');
+    if (selectionOption) selectionOption.textContent = t.selectionScopeSelection;
+    if (documentOption) documentOption.textContent = t.selectionScopeDocument;
+  }
+  if (askSelectionBtn) askSelectionBtn.textContent = t.askSelection;
+  if (selectionMailBtn) selectionMailBtn.textContent = t.sendAsMail;
+  if (selectionCalendarBtn) selectionCalendarBtn.textContent = t.addToCalendar;
+  updateQuestionContextScopeUI();
+  refreshActionButtons();
+  renderFileQuickToolbar(currentFileData);
   
   // Ayarlar modalını güncelle
-  document.querySelector("#settingsModal h2").innerHTML = `⚙️ ${t.settings}`;
-  document.querySelectorAll(".settings-section-title")[0].innerHTML = `🎨 ${t.appearance}`;
-  document.querySelectorAll(".settings-section-title")[1].innerHTML = `📋 ${t.general}`;
-  document.querySelectorAll(".settings-section-title")[2].innerHTML = `ℹ️ ${t.about}`;
+  document.querySelector("#settingsModal h2").textContent = t.settings;
+  if (settingsKicker) settingsKicker.textContent = t.settingsKicker;
+  if (settingsLead) settingsLead.textContent = t.settingsLead;
+  if (appearanceSettingsTitle) appearanceSettingsTitle.textContent = t.appearance;
+  if (generalSettingsTitle) generalSettingsTitle.textContent = t.general;
+  if (aiSettingsTitle) aiSettingsTitle.textContent = t.aiSettings;
+  if (aboutSettingsTitle) aboutSettingsTitle.textContent = t.about;
   
   // Ayarlar etiketleri
-  const labels = document.querySelectorAll(".setting-group label");
-  labels[0].textContent = t.themeMode;
-  labels[1].textContent = t.colorTheme;
-  labels[2].textContent = t.language;
-  labels[3].textContent = t.fileHistory;
+  if (themeModeLabel) themeModeLabel.textContent = t.themeMode;
+  if (colorThemeLabel) colorThemeLabel.textContent = t.colorTheme;
+  if (languageLabel) languageLabel.textContent = t.language;
+  if (fileHistoryLabel) fileHistoryLabel.textContent = t.fileHistory;
+  const aiProviderLabel = document.getElementById("aiProviderLabel");
+  if (aiProviderLabel) aiProviderLabel.textContent = t.aiProvider;
+  if (saveAISettingsBtn) saveAISettingsBtn.textContent = t.saveAISettings;
   
   // Tema butonları
   lightThemeBtn.querySelector("span").textContent = t.light;
   darkThemeBtn.querySelector("span").textContent = t.dark;
   
   // Temizle butonu
-  clearHistoryBtn.innerHTML = `<span class="btn-icon">🗑️</span> ${t.clearHistory}`;
+  if (clearHistoryBtn) {
+    clearHistoryBtn.innerHTML = `<span class="btn-icon">-</span> ${t.clearHistory}`;
+  }
   
   // Hakkında bölümü
   document.querySelector(".about-info .version").textContent = t.version;
   document.querySelector(".about-info .description").textContent = t.description;
   document.querySelector(".about-info .copyright").textContent = t.copyright;
+
+  AI_PROVIDER_IDS.forEach((providerId) => {
+    const fields = aiProviderFields[providerId];
+    if (!fields) return;
+    const apiKeyLabel = document.getElementById(`${providerId}ApiKeyLabel`);
+    const baseUrlLabel = document.getElementById(`${providerId}BaseUrlLabel`);
+    const textModelLabel = document.getElementById(`${providerId}TextModelLabel`);
+    const visionModelLabel = document.getElementById(`${providerId}VisionModelLabel`);
+    if (apiKeyLabel) apiKeyLabel.textContent = t.apiKey;
+    if (baseUrlLabel) baseUrlLabel.textContent = t.baseUrl;
+    if (textModelLabel) textModelLabel.textContent = t.textModel;
+    if (visionModelLabel) visionModelLabel.textContent = t.visionModel;
+    if (fields.refreshButton) fields.refreshButton.textContent = t.refreshModels;
+    if (fields.testButton) fields.testButton.textContent = t.testConnection;
+    if (fields.clearKeyButton) fields.clearKeyButton.textContent = t.clearSavedKey;
+    if (providerId === "ollama" && fields.pullButton) {
+      fields.pullButton.textContent = t.pullModel;
+    }
+    if (providerId === "ollama" && fields.pullInput) {
+      fields.pullInput.placeholder = t.ollamaPullPlaceholder;
+    }
+    if (providerId === "openrouter") {
+      const textModelIdLabel = document.getElementById("openrouterCustomTextModelLabel");
+      const visionModelIdLabel = document.getElementById("openrouterCustomVisionModelLabel");
+      if (textModelIdLabel) textModelIdLabel.textContent = t.textModelId;
+      if (visionModelIdLabel) visionModelIdLabel.textContent = t.visionModelId;
+      if (fields.baseUrlHint) fields.baseUrlHint.textContent = t.baseUrlDefaultHint;
+    }
+    updateProviderKeyHint(providerId, aiSettingsState?.providers?.[providerId]);
+  });
+
+  if (googleEdgeTitle) googleEdgeTitle.textContent = t.googleEdgeTitle;
+  if (googleEdgeDescription) googleEdgeDescription.textContent = t.googleEdgeDescription;
+
+  if (!aiSettingsStatus || !aiSettingsStatus.textContent.trim()) {
+    setAIStatus(t.aiSettingsIdle);
+  }
+  if (excelFullscreenBtn) {
+    excelFullscreenBtn.title = isExcelFullscreen ? t.exitFullscreen : t.fullscreen;
+  }
+  updatePreviewFullscreenButton();
+  updateHistoryUI();
   
   console.log(`Dil değiştirildi: ${lang}`);
 }
@@ -1183,23 +3325,61 @@ langToggle.addEventListener("click", () => {
   updateLanguage(newLang);
 });
 
+if (toolbarLangToggle) {
+  toolbarLangToggle.addEventListener("click", () => {
+    const newLang = currentLang === "tr" ? "en" : "tr";
+    updateLanguage(newLang);
+  });
+}
+
 // İlk yüklemede dili ayarla
 updateLanguage(currentLang);
 
-// Geçmişi temizle butonu
-clearHistoryBtn.addEventListener("click", () => {
-  if (confirm("Tüm dosya geçmişi silinecek. Emin misiniz?")) {
+function clearFileHistoryWithConfirm() {
+  const t = getCurrentTranslation();
+  if (confirm(t.clearHistoryConfirm)) {
     localStorage.removeItem("fileHistory");
-    historyList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">Geçmiş temizlendi</p>';
+    localStorage.removeItem("fileHistoryPinned");
+    historySearchTerm = "";
+    if (historySearchInput) historySearchInput.value = "";
+    updateHistoryUI();
     console.log("Dosya geçmişi temizlendi");
   }
-});
+}
 
-// Dosyayı yeniden yükle butonu
-reloadFileBtn.addEventListener("click", () => {
+// Geçmişi temizle butonları
+if (clearHistoryBtn) {
+  clearHistoryBtn.addEventListener("click", clearFileHistoryWithConfirm);
+}
+
+if (clearRecentFilesBtn) {
+  clearRecentFilesBtn.addEventListener("click", clearFileHistoryWithConfirm);
+}
+
+function reloadActiveFile() {
   if (currentFileData && currentFileData.fullPath) {
     console.log("Dosya yeniden yükleniyor:", currentFileData.fullPath);
+    const activeTab = getActiveDocumentTab();
+    if (activeTab) {
+      tabState = window.FilePeekTabs.closeTab(tabState, activeTab.id);
+    }
     loadFile(currentFileData.fullPath);
+  }
+}
+
+// Dosyayı yeniden yükle butonu
+reloadFileBtn.addEventListener("click", reloadActiveFile);
+
+if (previewFullscreenBtn) {
+  previewFullscreenBtn.addEventListener("click", () => {
+    setPreviewFullscreen(!isPreviewFullscreen);
+  });
+  updatePreviewFullscreenButton();
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && isPreviewFullscreen) {
+    setPreviewFullscreen(false);
   }
 });
 
@@ -1210,6 +3390,7 @@ const wordEditorModal = document.getElementById("wordEditorModal");
 const excelEditorModal = document.getElementById("excelEditorModal");
 const wordEditorContent = document.getElementById("wordEditorContent");
 const excelEditorContent = document.getElementById("excelEditorContent");
+const excelEditorSurface = excelEditorModal ? excelEditorModal.querySelector(".excel-editor-modal") : null;
 
 // Butonlar
 const editWordBtn = document.getElementById("editWordBtn");
@@ -1250,12 +3431,55 @@ const textColorPicker = document.getElementById("textColorPicker");
 // Formül çubuğu
 const formulaInput = document.getElementById("formulaInput");
 const formulaCellName = document.getElementById("formulaCellName");
+const excelSheetSelect = document.getElementById("excelSheetSelect");
 
 let currentEditingFile = null;
+let excelSheets = [];
+let activeExcelSheetIndex = 0;
 let excelData = []; // Şimdi {value, style} objesi içerecek
 let selectedCell = null;
 let selectedRow = null;
 let selectedColumn = null;
+const EXCEL_ROW_HEIGHT = 38;
+const EXCEL_ROW_OVERSCAN = 4;
+
+function getExcelVirtualization() {
+  return window.FilePeekExcelVirtualization || {
+    calculateVisibleRange({ rowCount, rowHeight, viewportHeight, scrollTop, overscan = 4 }) {
+      const totalHeight = rowCount * rowHeight;
+      if (!rowCount) {
+        return { startRow: 0, endRow: -1, paddingTop: 0, paddingBottom: 0, totalHeight: 0 };
+      }
+
+      const visibleRowCount = Math.max(1, Math.ceil(viewportHeight / rowHeight));
+      const firstVisibleRow = Math.max(0, Math.floor(scrollTop / rowHeight));
+      const lastVisibleRow = Math.min(rowCount - 1, firstVisibleRow + visibleRowCount - 1);
+      const startRow = Math.max(0, firstVisibleRow - overscan);
+      const endRow = Math.min(rowCount - 1, lastVisibleRow + overscan);
+      return {
+        startRow,
+        endRow,
+        paddingTop: startRow * rowHeight,
+        paddingBottom: Math.max(0, (rowCount - endRow - 1) * rowHeight),
+        totalHeight,
+      };
+    }
+  };
+}
+
+function updateExcelFullscreenButton() {
+  if (!excelFullscreenBtn) return;
+  const t = getCurrentTranslation();
+  excelFullscreenBtn.title = isExcelFullscreen ? t.exitFullscreen : t.fullscreen;
+  excelFullscreenBtn.innerHTML = getIconMarkup(isExcelFullscreen ? "compress" : "expand", "modal-btn-icon");
+}
+
+function setExcelFullscreen(nextState) {
+  if (!excelEditorSurface) return;
+  isExcelFullscreen = nextState;
+  excelEditorSurface.classList.toggle("is-fullscreen", nextState);
+  updateExcelFullscreenButton();
+}
 
 function getSelectionCells() {
   if (selectedRow !== null) {
@@ -1298,6 +3522,76 @@ function setColorOnSelection(key, value) {
   renderExcelTable();
 }
 
+function createExcelCell(value = "", style = {}) {
+  return {
+    value,
+    style: {
+      bold: false,
+      italic: false,
+      underline: false,
+      align: "left",
+      bgColor: "#ffffff",
+      textColor: "#000000",
+      ...style,
+    },
+  };
+}
+
+function cloneSheetRows(rows = []) {
+  return rows.map((row) =>
+    row.map((cell) => {
+      if (cell && typeof cell === "object") {
+        return createExcelCell(cell.value ?? "", cell.style || {});
+      }
+      return createExcelCell(cell || "");
+    })
+  );
+}
+
+function syncActiveExcelSheet() {
+  const activeSheet = excelSheets[activeExcelSheetIndex];
+  excelData = activeSheet?.rows || [];
+}
+
+function renderExcelSheetOptions() {
+  if (!excelSheetSelect) return;
+
+  excelSheetSelect.innerHTML = excelSheets.map((sheet, index) => (
+    `<option value="${index}" ${index === activeExcelSheetIndex ? "selected" : ""}>${escapeHtml(sheet.name)}</option>`
+  )).join("");
+  excelSheetSelect.disabled = excelSheets.length <= 1;
+}
+
+function ensureExcelCell(rowIndex, colIndex) {
+  if (!excelData[rowIndex]) {
+    excelData[rowIndex] = [];
+  }
+
+  if (!excelData[rowIndex][colIndex] || typeof excelData[rowIndex][colIndex] !== "object") {
+    const rawValue = excelData[rowIndex][colIndex];
+    excelData[rowIndex][colIndex] = createExcelCell(typeof rawValue === "string" ? rawValue : rawValue?.value || "");
+  } else if (!excelData[rowIndex][colIndex].style) {
+    excelData[rowIndex][colIndex].style = createExcelCell().style;
+  }
+
+  return excelData[rowIndex][colIndex];
+}
+
+function ensureSelectedCellVisible() {
+  if (!excelEditorContent || !selectedCell) return;
+
+  const visibleTop = excelEditorContent.scrollTop;
+  const visibleBottom = visibleTop + excelEditorContent.clientHeight;
+  const cellTop = selectedCell.row * EXCEL_ROW_HEIGHT;
+  const cellBottom = cellTop + EXCEL_ROW_HEIGHT;
+
+  if (cellTop < visibleTop) {
+    excelEditorContent.scrollTop = cellTop;
+  } else if (cellBottom > visibleBottom) {
+    excelEditorContent.scrollTop = Math.max(0, cellBottom - excelEditorContent.clientHeight);
+  }
+}
+
 // Word düzenle butonu
 editWordBtn.addEventListener("click", () => {
   if (!currentFileData || currentFileData.type !== "docx") return;
@@ -1336,44 +3630,47 @@ editExcelBtn.addEventListener("click", () => {
   }
   
   excelEditorModal.classList.remove("hidden");
+  setExcelFullscreen(false);
   currentEditingFile = currentFileData.fullPath || null;
   
   // Excel verilerini yükle (değer + stil)
-  if (currentFileData.rows && currentFileData.rows.length > 0) {
-    console.log("Mevcut Excel verileri yükleniyor:", currentFileData.rows.length, "satır");
-    excelData = currentFileData.rows.map(row => 
-      row.map(value => ({
-        value: value || "",
-        style: {
-          bold: false,
-          italic: false,
-          underline: false,
-          align: "left",
-          bgColor: "#ffffff",
-          textColor: "#000000"
-        }
-      }))
-    );
+  if (currentFileData.sheetData && currentFileData.sheetData.length > 0) {
+    excelSheets = currentFileData.sheetData.map((sheet) => ({
+      name: sheet.name,
+      rows: cloneSheetRows(sheet.rows),
+    }));
+  } else if (currentFileData.editorRows && currentFileData.editorRows.length > 0) {
+    console.log("Mevcut Excel verileri yükleniyor:", currentFileData.editorRows.length, "satır");
+    excelSheets = [{
+      name: currentFileData.sheets?.[0] || "Sheet1",
+      rows: cloneSheetRows(currentFileData.editorRows),
+    }];
+  } else if (currentFileData.rows && currentFileData.rows.length > 0) {
+    console.log("Preview satırlarından Excel verisi yükleniyor:", currentFileData.rows.length, "satır");
+    excelSheets = [{
+      name: currentFileData.sheets?.[0] || "Sheet1",
+      rows: currentFileData.rows.map((row) =>
+        row.map((value) => createExcelCell(value || ""))
+      ),
+    }];
   } else {
-    // Boş tablo oluştur
-    console.log("Boş tablo oluşturuluyor");
-    excelData = Array(10).fill(null).map(() => 
-      Array(10).fill(null).map(() => ({
-        value: "",
-        style: {
-          bold: false,
-          italic: false,
-          underline: false,
-          align: "left",
-          bgColor: "#ffffff",
-          textColor: "#000000"
-        }
-      }))
-    );
+    console.log("Bos tablo olusturuluyor");
+    excelSheets = [{
+      name: "Sheet1",
+      rows: Array(10).fill(null).map(() =>
+        Array(10).fill(null).map(() => createExcelCell())
+      ),
+    }];
   }
-  
+
+  activeExcelSheetIndex = 0;
+  syncActiveExcelSheet();
+  renderExcelSheetOptions();
   console.log("excelData hazır:", excelData);
   selectedCell = { row: 0, col: 0 };
+  selectedRow = null;
+  selectedColumn = null;
+  excelEditorContent.scrollTop = 0;
   
   try {
     renderExcelTable();
@@ -1382,6 +3679,30 @@ editExcelBtn.addEventListener("click", () => {
     console.error("Tablo render hatası:", error);
   }
 });
+
+if (excelFullscreenBtn) {
+  excelFullscreenBtn.addEventListener("click", () => {
+    setExcelFullscreen(!isExcelFullscreen);
+  });
+  updateExcelFullscreenButton();
+}
+
+if (excelSheetSelect) {
+  const excelToolbar = excelEditorModal?.querySelector(".editor-toolbar");
+  if (excelToolbar && excelSheetSelect.parentElement?.parentElement !== excelToolbar) {
+    excelToolbar.prepend(excelSheetSelect.parentElement);
+  }
+
+  excelSheetSelect.addEventListener("change", (event) => {
+    activeExcelSheetIndex = Number(event.target.value) || 0;
+    syncActiveExcelSheet();
+    selectedCell = { row: 0, col: 0 };
+    selectedRow = null;
+    selectedColumn = null;
+    excelEditorContent.scrollTop = 0;
+    renderExcelTable();
+  });
+}
 
 // Word toolbar işlevleri
 boldBtn.addEventListener("click", () => {
@@ -1423,6 +3744,13 @@ function renderExcelTable() {
   
   const rows = excelData.length;
   const cols = excelData[0]?.length || 10;
+  const range = getExcelVirtualization().calculateVisibleRange({
+    rowCount: rows,
+    rowHeight: EXCEL_ROW_HEIGHT,
+    viewportHeight: excelEditorContent.clientHeight || 400,
+    scrollTop: excelEditorContent.scrollTop || 0,
+    overscan: EXCEL_ROW_OVERSCAN,
+  });
   
   let html = '<table class="excel-table">';
   
@@ -1433,23 +3761,15 @@ function renderExcelTable() {
   }
   html += '</tr></thead><tbody>';
   
+  if (range.paddingTop > 0) {
+    html += `<tr class="excel-spacer-row" aria-hidden="true"><th class="excel-row-number"></th><td colspan="${cols}"><div class="excel-spacer" style="height:${range.paddingTop}px"></div></td></tr>`;
+  }
+
   // Veri satırları
-  for (let r = 0; r < rows; r++) {
-    html += `<tr><th class="row-header" data-row="${r}">${r + 1}</th>`;
+  for (let r = range.startRow; r <= range.endRow; r++) {
+    html += `<tr><th class="row-header excel-row-number" data-row="${r}">${r + 1}</th>`;
     for (let c = 0; c < cols; c++) {
-      let cell = excelData[r][c];
-      
-      // Hücre yoksa veya düzgün formatlanmamışsa default oluştur
-      if (!cell || typeof cell !== 'object') {
-        cell = {
-          value: typeof cell === 'string' ? cell : "",
-          style: {
-            bold: false, italic: false, underline: false,
-            align: "left", bgColor: "#ffffff", textColor: "#000000"
-          }
-        };
-        excelData[r][c] = cell;
-      }
+      const cell = ensureExcelCell(r, c);
       
       const rawValue = cell.value ?? "";
       const computedValue = (rawValue && rawValue.toString().startsWith('=')) ? evaluateFormula(rawValue.toString(), r, c) : rawValue;
@@ -1471,9 +3791,22 @@ function renderExcelTable() {
     }
     html += '</tr>';
   }
+
+  if (range.paddingBottom > 0) {
+    html += `<tr class="excel-spacer-row" aria-hidden="true"><th class="excel-row-number"></th><td colspan="${cols}"><div class="excel-spacer" style="height:${range.paddingBottom}px"></div></td></tr>`;
+  }
   
   html += '</tbody></table>';
   excelEditorContent.innerHTML = html;
+
+  if (!excelEditorContent.dataset.virtualScrollBound) {
+    excelEditorContent.addEventListener("scroll", () => {
+      window.requestAnimationFrame(() => {
+        renderExcelTable();
+      });
+    });
+    excelEditorContent.dataset.virtualScrollBound = "true";
+  }
   
   // Input değişikliklerini dinle
   const inputs = excelEditorContent.querySelectorAll("input");
@@ -1525,8 +3858,9 @@ function renderExcelTable() {
   
   // İlk hücreye focus
   if (selectedCell) {
+    ensureSelectedCellVisible();
     const input = excelEditorContent.querySelector(`input[data-row="${selectedCell.row}"][data-col="${selectedCell.col}"]`);
-    if (input) input.focus();
+    if (input && document.activeElement !== input) input.focus({ preventScroll: true });
   }
   
   updateSelectionHighlight();
@@ -1567,55 +3901,11 @@ function updateSelectionHighlight() {
 
 // Formül motoru (basit)
 function evaluateFormula(formula, currentRow, currentCol) {
-  try {
-    if (!formula.startsWith('=')) return formula;
-    
-    const expr = formula.substring(1).toUpperCase();
-    
-    // =SUM(A1:A10) gibi fonksiyonlar
-    if (expr.startsWith('SUM(')) {
-      const range = expr.match(/SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
-      if (range) {
-        const [, startCol, startRow, endCol, endRow] = range;
-        return calculateRange(startCol, parseInt(startRow)-1, endCol, parseInt(endRow)-1, 'sum');
-      }
-    }
-    
-    // =AVERAGE(A1:A10)
-    if (expr.startsWith('AVERAGE(') || expr.startsWith('AVG(')) {
-      const range = expr.match(/(AVERAGE|AVG)\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
-      if (range) {
-        const [, , startCol, startRow, endCol, endRow] = range;
-        return calculateRange(startCol, parseInt(startRow)-1, endCol, parseInt(endRow)-1, 'avg');
-      }
-    }
-    
-    // =COUNT(A1:A10)
-    if (expr.startsWith('COUNT(')) {
-      const range = expr.match(/COUNT\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)/);
-      if (range) {
-        const [, startCol, startRow, endCol, endRow] = range;
-        return calculateRange(startCol, parseInt(startRow)-1, endCol, parseInt(endRow)-1, 'count');
-      }
-    }
-    
-    // Basit aritmetik (=A1+B1, =A1*2 vb.)
-    let result = expr;
-    const cellRefs = expr.match(/[A-Z]\d+/g);
-    if (cellRefs) {
-      cellRefs.forEach(ref => {
-        const col = ref.charCodeAt(0) - 65;
-        const row = parseInt(ref.substring(1)) - 1;
-        const value = parseFloat(excelData[row]?.[col]?.value || 0);
-        result = result.replace(ref, value);
-      });
-      return eval(result);
-    }
-    
-    return formula;
-  } catch (e) {
-    return '#HATA!';
+  if (!window.FilePeekExcelFormulas?.evaluateFormula) {
+    return "#HATA!";
   }
+
+  return window.FilePeekExcelFormulas.evaluateFormula(formula, excelData);
 }
 
 function calculateRange(startCol, startRow, endCol, endRow, operation) {
@@ -1653,25 +3943,13 @@ formulaInput.addEventListener("keypress", (e) => {
 // Excel satır/sütun işlemleri
 addRowBtn.addEventListener("click", () => {
   const cols = excelData[0]?.length || 10;
-  const newRow = Array(cols).fill(null).map(() => ({
-    value: "",
-    style: {
-      bold: false, italic: false, underline: false,
-      align: "left", bgColor: "#ffffff", textColor: "#000000"
-    }
-  }));
+  const newRow = Array(cols).fill(null).map(() => createExcelCell());
   excelData.push(newRow);
   renderExcelTable();
 });
 
 addColBtn.addEventListener("click", () => {
-  excelData.forEach(row => row.push({
-    value: "",
-    style: {
-      bold: false, italic: false, underline: false,
-      align: "left", bgColor: "#ffffff", textColor: "#000000"
-    }
-  }));
+  excelData.forEach(row => row.push(createExcelCell()));
   renderExcelTable();
 });
 
@@ -1733,10 +4011,10 @@ saveWordBtn.addEventListener("click", async () => {
   const result = await window.kankaAPI.saveWord(currentEditingFile, htmlContent);
   
   if (result.success) {
-    alert("✅ Word dosyası kaydedildi!");
+    alert("Word dosyası kaydedildi!");
     wordEditorModal.classList.add("hidden");
   } else {
-    alert("❌ Hata: " + result.error);
+    alert("Hata: " + result.error);
   }
 });
 
@@ -1753,11 +4031,11 @@ saveWordAsBtn.addEventListener("click", async () => {
   const result = await window.kankaAPI.saveWord(filePath, htmlContent);
   
   if (result.success) {
-    alert("✅ Word dosyası kaydedildi!");
+    alert("Word dosyası kaydedildi!");
     wordEditorModal.classList.add("hidden");
     currentEditingFile = filePath;
   } else {
-    alert("❌ Hata: " + result.error);
+    alert("Hata: " + result.error);
   }
 });
 
@@ -1768,21 +4046,22 @@ saveExcelBtn.addEventListener("click", async () => {
     return;
   }
   
-  // Değerleri extract et (stil bilgisi olmadan)
-  const rows = excelData.map(row => row.map(cell => cell.value));
-  
   const data = {
-    sheetName: "Sheet1",
-    rows: rows
+    sheetName: excelSheets[activeExcelSheetIndex]?.name || "Sheet1",
+    rows: excelData,
+    sheets: excelSheets.map((sheet) => ({
+      name: sheet.name,
+      rows: sheet.rows,
+    }))
   };
   
   const result = await window.kankaAPI.saveExcel(currentEditingFile, data);
   
   if (result.success) {
-    alert("✅ Excel dosyası kaydedildi!");
+    alert("Excel dosyası kaydedildi!");
     excelEditorModal.classList.add("hidden");
   } else {
-    alert("❌ Hata: " + result.error);
+    alert("Hata: " + result.error);
   }
 });
 
@@ -1795,45 +4074,59 @@ saveExcelAsBtn.addEventListener("click", async () => {
   
   if (!filePath) return;
   
-  // Değerleri extract et
-  const rows = excelData.map(row => row.map(cell => cell.value));
-  
   const data = {
-    sheetName: "Sheet1",
-    rows: rows
+    sheetName: excelSheets[activeExcelSheetIndex]?.name || "Sheet1",
+    rows: excelData,
+    sheets: excelSheets.map((sheet) => ({
+      name: sheet.name,
+      rows: sheet.rows,
+    }))
   };
   
   const result = await window.kankaAPI.saveExcel(filePath, data);
   
   if (result.success) {
-    alert("✅ Excel dosyası kaydedildi!");
+    alert("Excel dosyası kaydedildi!");
     excelEditorModal.classList.add("hidden");
     currentEditingFile = filePath;
   } else {
-    alert("❌ Hata: " + result.error);
+    alert("Hata: " + result.error);
   }
 });
 
 // Modal kapatma
 closeWordEditor.addEventListener("click", () => wordEditorModal.classList.add("hidden"));
 cancelWordBtn.addEventListener("click", () => wordEditorModal.classList.add("hidden"));
-closeExcelEditor.addEventListener("click", () => excelEditorModal.classList.add("hidden"));
-cancelExcelBtn.addEventListener("click", () => excelEditorModal.classList.add("hidden"));
+closeExcelEditor.addEventListener("click", () => {
+  setExcelFullscreen(false);
+  excelEditorModal.classList.add("hidden");
+});
+cancelExcelBtn.addEventListener("click", () => {
+  setExcelFullscreen(false);
+  excelEditorModal.classList.add("hidden");
+});
 
 // Dosya yüklendiğinde düzenle butonlarını göster/gizle
 function updateEditorButtons() {
+  const wordEditButton = document.getElementById("editWordBtn");
+  const excelEditButton = document.getElementById("editExcelBtn");
+
+  if (!wordEditButton || !excelEditButton) {
+    return;
+  }
+
   const isWord = currentFileData?.type === "docx";
   const isExcel = currentFileData?.type === "xlsx" || currentFileData?.type === "xls";
   
   if (isWord) {
-    editWordBtn.classList.remove("hidden");
-    editExcelBtn.classList.add("hidden");
+    wordEditButton.classList.remove("hidden");
+    excelEditButton.classList.add("hidden");
   } else if (isExcel) {
-    editWordBtn.classList.add("hidden");
-    editExcelBtn.classList.remove("hidden");
+    wordEditButton.classList.add("hidden");
+    excelEditButton.classList.remove("hidden");
   } else {
-    editWordBtn.classList.add("hidden");
-    editExcelBtn.classList.add("hidden");
+    wordEditButton.classList.add("hidden");
+    excelEditButton.classList.add("hidden");
   }
 }
 
@@ -1845,4 +4138,6 @@ pickFileBtn.addEventListener("click", async () => {
 });
 
 // İlk yükleme mesajı
-console.log("✅ KankaAI hazır! (Editör modülleri yüklendi)");
+console.log("KankaAI hazır! (Editör modülleri yüklendi)");
+
+

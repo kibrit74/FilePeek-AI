@@ -6,10 +6,13 @@
   "scripts": {
     "start": "electron .",
     "dev:electron": "start landing-page.html && electron .",
+    "test": "node --test test/*.test.js",
     "build": "electron-builder",
+    "dist:dir": "electron-builder --win --x64 --dir",
     "dist": "electron-builder --win --x64",
     "dist:win": "electron-builder --win --x64",
-    "dist:portable": "electron-builder --win portable"
+    "dist:portable": "electron-builder --win portable",
+    "register:context-menu": "powershell -ExecutionPolicy Bypass -File scripts/register-context-menu.ps1"
   },
   "keywords": [
     "electron",
@@ -21,35 +24,33 @@
   "author": "FilePeek AI Team",
   "license": "MIT",
   "dependencies": {
+    "@e965/xlsx": "^0.20.3",
     "@google/generative-ai": "^0.21.0",
-    "axios": "^1.7.0",
+    "axios": "^1.15.0",
     "docx": "^9.5.1",
     "dotenv": "^16.4.0",
     "jszip": "^3.10.0",
     "mammoth": "^1.8.0",
     "pdf-parse": "^1.1.1",
-    "pdfjs-dist": "^3.11.174",
-    "xlsx": "^0.18.5"
+    "pdfjs-dist": "^5.6.205"
   },
   "devDependencies": {
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.0"
+    "electron": "^41.2.1",
+    "electron-builder": "^26.8.1"
   },
   "build": {
     "appId": "com.filepeek.ai",
     "productName": "FilePeek AI",
+    "compression": "store",
     "files": [
       "src/**/*",
       "package.json"
     ],
-    "extraResources": [
-      {
-        "from": ".env",
-        "to": ".env"
-      }
-    ],
     "directories": {
       "output": "dist"
+    },
+    "toolsets": {
+      "winCodeSign": "1.1.0"
     },
     "fileAssociations": [
       {
@@ -117,7 +118,11 @@
       "target": [
         "nsis"
       ],
+      "signAndEditExecutable": false,
       "icon": "build/icon.png"
+    },
+    "nsis": {
+      "include": "build/installer.nsh"
     },
     "mac": {
       "icon": "build/icon.png"

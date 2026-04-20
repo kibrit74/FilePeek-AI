@@ -2,6 +2,7 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FilePeek AI - See inside, instantly</title>
   <link rel="stylesheet" href="styles.css">
@@ -13,7 +14,10 @@
         <div class="brand-logo">
           <div class="logo-icon-app">
             <div class="doc-mini"></div>
-            <div class="eye-mini">👁️</div>
+            <svg class="eye-mini" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+              <circle cx="12" cy="12" r="2.8"></circle>
+            </svg>
           </div>
         </div>
         <div class="brand-text">
@@ -22,41 +26,72 @@
         </div>
         <div class="brand-actions">
           <button class="theme-toggle lang-toggle" id="langToggle" title="Dil Seç">
-            <span class="lang-icon">🌐</span>
+            <svg class="lang-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M3 12h18M12 3c2.2 2.5 3.2 5.5 3.2 9s-1 6.5-3.2 9M12 3c-2.2 2.5-3.2 5.5-3.2 9s1 6.5 3.2 9"></path>
+            </svg>
             <span class="lang-text" id="langText">TR</span>
           </button>
-          <button class="theme-toggle" id="settingsBtn" title="Ayarlar">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
+          <button class="theme-toggle settings-toggle" id="settingsBtn" title="Ayarlar">
+            <svg class="settings-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h10"></path>
+              <path d="M18 7h2"></path>
+              <circle cx="16" cy="7" r="2"></circle>
+              <path d="M4 17h2"></path>
+              <path d="M10 17h10"></path>
+              <circle cx="8" cy="17" r="2"></circle>
             </svg>
           </button>
         </div>
       </div>
       
-      <div class="action-section">
-        <button id="pickFileBtn" class="btn-primary">
-          <span class="btn-icon">+</span>
-          Dosya Aç
-        </button>
-        <button id="batchBtn" class="btn-secondary">
-          <span class="btn-icon">📚</span>
-          Toplu İşlem
-        </button>
-        <div id="dropZone" class="drop-zone">
-          <svg class="upload-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-          <p>Dosya sürükleyin</p>
-          <span class="formats">PDF, DOCX, XLSX, TXT, ZIP, UDF, JPG, PNG, GIF</span>
+      <div class="action-section" id="uploadPanel">
+        <div class="upload-panel-header">
+          <span>Dosya Yükleme</span>
+          <button class="panel-toggle-btn upload-panel-toggle" id="uploadPanelToggle" type="button" aria-expanded="true" title="Paneli gizle">
+            <span class="panel-toggle-line"></span>
+          </button>
+        </div>
+        <div class="upload-panel-body">
+          <button id="pickFileBtn" class="btn-primary">
+            <span class="btn-icon">+</span>
+            Dosya Aç
+          </button>
+          <button id="batchBtn" class="btn-secondary">
+            <svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 4h10a2 2 0 0 1 2 2v13H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"></path>
+              <path d="M8 8h8M8 12h8M8 16h5"></path>
+            </svg>
+            Toplu İşlem
+          </button>
+          <div id="dropZone" class="drop-zone">
+            <svg class="upload-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <p>Dosya sürükleyin</p>
+            <span class="formats">PDF, DOCX, XLSX, TXT, ZIP, UDF, JPG, PNG, GIF</span>
+          </div>
         </div>
       </div>
 
       <!-- Dosya Geçmişi -->
       <div class="file-history">
-        <h4>Son Açılan Dosyalar</h4>
+        <div class="file-history-header">
+          <h4>Son Açılan Dosyalar</h4>
+          <div class="history-header-actions">
+            <input id="historySearchInput" class="history-search-input" type="search" placeholder="Dosya ara" aria-label="Son açılan dosyalarda ara">
+            <button id="clearRecentFilesBtn" class="history-clear-btn" type="button" title="Geçmişi Temizle" aria-label="Geçmişi Temizle">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h18"></path>
+                <path d="M8 6V4h8v2"></path>
+                <path d="M19 6l-1 14H6L5 6"></path>
+                <path d="M10 11v5M14 11v5"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
         <ul id="historyList" class="history-list"></ul>
       </div>
 
@@ -69,6 +104,41 @@
     </aside>
 
     <main class="content">
+      <div class="browser-shell">
+        <div class="tab-strip" id="tabStrip">
+          <button class="new-tab-button" id="newTabButton" title="Yeni dosya aç">+</button>
+        </div>
+        <div class="browser-toolbar">
+          <button class="toolbar-icon-btn" id="sidebarToggleBtn" title="Sol paneli gizle">
+            <svg class="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 5h16v14H4z"></path>
+              <path d="M9 5v14"></path>
+            </svg>
+          </button>
+          <button class="toolbar-icon-btn" id="toolbarOpenBtn" title="Dosya Aç">+</button>
+          <button class="toolbar-icon-btn" id="toolbarReloadBtn" title="Yenile">↻</button>
+          <div class="address-field" id="addressField">Yeni sekme</div>
+          <div class="toolbar-spacer"></div>
+          <button class="toolbar-icon-btn toolbar-lang-btn" id="toolbarLangToggle" title="Dil Değiştir">
+            <svg class="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M3 12h18M12 3c2.2 2.5 3.2 5.5 3.2 9s-1 6.5-3.2 9M12 3c-2.2 2.5-3.2 5.5-3.2 9s1 6.5 3.2 9"></path>
+            </svg>
+            <span id="toolbarLangText">TR</span>
+          </button>
+          <button class="toolbar-icon-btn toolbar-settings-btn" id="toolbarSettingsBtn" title="Ayarlar">
+            <svg class="toolbar-svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h10"></path>
+              <path d="M18 7h2"></path>
+              <circle cx="16" cy="7" r="2"></circle>
+              <path d="M4 17h2"></path>
+              <path d="M10 17h10"></path>
+              <circle cx="8" cy="17" r="2"></circle>
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <!-- Dosya Bilgisi -->
       <section id="fileInfo" class="file-info hidden">
         <div class="file-header">
@@ -76,43 +146,119 @@
             <h2 id="fileName">Dosya</h2>
             <span id="fileType" class="file-badge"></span>
           </div>
-          <button class="reload-btn" id="reloadFileBtn" title="Dosyayı Yeniden Yükle">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="23 4 23 10 17 10"></polyline>
-              <polyline points="1 20 1 14 7 14"></polyline>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-          </button>
+          <div class="file-header-actions">
+            <button class="preview-fullscreen-btn" id="previewFullscreenBtn" type="button" title="Tam ekran" aria-pressed="false">
+              <span class="modal-btn-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                  <path d="M8 3H3v5"></path>
+                  <path d="M16 3h5v5"></path>
+                  <path d="M21 16v5h-5"></path>
+                  <path d="M8 21H3v-5"></path>
+                </svg>
+              </span>
+              <span>Tam ekran</span>
+            </button>
+            <button class="reload-btn" id="reloadFileBtn" title="Dosyayı Yeniden Yükle">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
         </div>
+
+        <div id="fileQuickToolbar" class="file-quick-toolbar hidden" aria-label="Dosya araçları"></div>
         
         <!-- Önizleme -->
-        <div id="preview" class="preview-section"></div>
+        <div id="preview" class="preview-section" tabindex="-1"></div>
 
         <!-- AI Kontrolleri -->
-        <div class="ai-panel">
-          <h3 class="panel-title">AI Analiz</h3>
+        <div class="ai-panel" id="aiPanel">
+          <div class="ai-panel-header">
+            <h3 class="panel-title">AI Analiz</h3>
+            <button class="panel-toggle-btn" id="aiPanelToggle" type="button" aria-expanded="true" title="Paneli gizle">
+              <span class="panel-toggle-line"></span>
+            </button>
+          </div>
           <div class="ai-controls">
             <div class="button-row">
               <button id="summaryBtn" class="btn-ai">
-                <span class="ai-icon">⚡</span>
-                Özetle
+                <span class="ai-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.4L12 15l-1.9-4.6L5.5 9l4.6-1.4L12 3Z"></path>
+                    <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z"></path>
+                  </svg>
+                </span>
+                <span>Özetle</span>
               </button>
               <button id="editWordBtn" class="btn-ai btn-secondary hidden">
-                <span class="ai-icon">📝</span>
-                Düzenle
+                <span class="ai-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"></path>
+                  </svg>
+                </span>
+                <span>Düzenle</span>
               </button>
               <button id="editExcelBtn" class="btn-ai btn-secondary hidden">
-                <span class="ai-icon">📊</span>
-                Düzenle
+                <span class="ai-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                    <path d="M8 4v16M3 10h18"></path>
+                    <path d="M14 14l4-4"></path>
+                    <path d="M15 10h3v3"></path>
+                  </svg>
+                </span>
+                <span>Düzenle</span>
               </button>
               <button id="translateBtn" class="btn-ai btn-secondary">
-                <span class="ai-icon">🌐</span>
-                Çevir
+                <span class="ai-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M5 8h10"></path>
+                    <path d="M10 4v4c0 4-2 7-5 9"></path>
+                    <path d="M8 12c1.2 1.9 3 3.7 5 5"></path>
+                    <path d="M15 6h6"></path>
+                    <path d="M18 6c0 5-2 9-5 12"></path>
+                    <path d="M16 16h6"></path>
+                  </svg>
+                </span>
+                <span>Çevir</span>
               </button>
               <button id="speakBtn" class="btn-ai btn-secondary">
-                <span class="ai-icon">🔊</span>
-                Oku
+                <span class="ai-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M11 5 6 9H3v6h3l5 4V5Z"></path>
+                    <path d="M15.5 8.5a5 5 0 0 1 0 7"></path>
+                    <path d="M18.5 5.5a9 9 0 0 1 0 13"></path>
+                  </svg>
+                </span>
+                <span>Oku</span>
               </button>
+            </div>
+            <div id="selectedContextBar" class="selected-context-bar hidden">
+              <div class="selected-context-copy">
+                <span class="selected-context-label">Seçili Metin</span>
+                <p id="selectedContextText" class="selected-context-text"></p>
+              </div>
+              <div class="selected-context-actions">
+                <label class="selected-context-scope" for="questionContextScopeSelect">
+                  <span class="selected-context-scope-label">Soru Bağlamı</span>
+                  <select id="questionContextScopeSelect" class="setting-select selected-context-scope-select">
+                    <option value="selection">Yalnızca Seçim</option>
+                    <option value="document">Tüm Belge</option>
+                  </select>
+                </label>
+                <button id="askSelectionBtn" class="btn-ai btn-secondary btn-selection" type="button">Seçileni Sor</button>
+                <button id="selectionMailBtn" class="btn-ai btn-secondary btn-selection" type="button">Mail Olarak Gönder</button>
+                <button id="selectionCalendarBtn" class="btn-ai btn-secondary btn-selection" type="button">Takvime Ekle</button>
+                <button id="clearSelectionContextBtn" class="history-clear-btn selected-context-clear" type="button" title="Seçimi Temizle" aria-label="Seçimi Temizle">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M18 6 6 18"></path>
+                    <path d="m6 6 12 12"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
             <div class="question-wrapper">
               <input 
@@ -121,7 +267,25 @@
                 placeholder="Dosya hakkında soru sorun..."
                 class="question-input"
               />
-              <button id="askBtn" class="btn-ai btn-ask">Sor</button>
+              <button id="voiceQuestionBtn" class="btn-ai btn-voice-question" type="button" title="Sesli soru sor" aria-label="Sesli soru sor">
+                <span class="ai-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"></path>
+                    <path d="M5 10v1a7 7 0 0 0 14 0v-1"></path>
+                    <path d="M12 18v3"></path>
+                    <path d="M8 21h8"></path>
+                  </svg>
+                </span>
+              </button>
+              <button id="askBtn" class="btn-ai btn-ask">
+                <span class="ai-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M21 11.5a8.5 8.5 0 1 1-4.2-7.3"></path>
+                    <path d="M22 22l-4.3-4.3"></path>
+                  </svg>
+                </span>
+                <span>Sor</span>
+              </button>
             </div>
           </div>
 
@@ -149,13 +313,17 @@
       </div>
 
       <!-- Boş Durum -->
-      <div class="empty-state">
+      <div class="empty-state new-tab-view">
         <svg class="empty-icon" width="140" height="140" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
           <polyline points="13 2 13 9 20 9"></polyline>
         </svg>
-        <h2>Dosya Seçin</h2>
-        <p>Soldaki alandan bir dosya seçin veya sürükleyip bırakın</p>
+        <h2>Yeni Sekme</h2>
+        <p>Bir belge açın, sürükleyip bırakın veya son dosyalardan devam edin</p>
+        <button class="btn-primary new-tab-open-btn" id="emptyOpenBtn">
+          <span class="btn-icon">+</span>
+          Dosya Aç
+        </button>
         <div class="file-formats">
           <span class="format-badge">PDF</span>
           <span class="format-badge">DOCX</span>
@@ -196,21 +364,110 @@
     </div>
   </div>
 
+  <div id="selectionMailModal" class="modal hidden">
+    <div class="modal-content" style="max-width: 640px;">
+      <div class="modal-header">
+        <h2>Gmail Taslağı</h2>
+        <button class="modal-close" id="closeSelectionMailModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="settings-helper-text">Metin modele otomatik gönderilmez. İstersen dil ve detay seçip <strong>Yaz</strong> ile taslak ürettir.</p>
+        <div class="provider-grid">
+          <div class="setting-group compact">
+            <label for="selectionMailLanguageSelect">Dil</label>
+            <select id="selectionMailLanguageSelect" class="setting-select">
+              <option value="Türkçe">Türkçe</option>
+              <option value="İngilizce">İngilizce</option>
+            </select>
+          </div>
+          <div class="setting-group compact">
+            <label for="selectionMailDetailSelect">Detay</label>
+            <select id="selectionMailDetailSelect" class="setting-select">
+              <option value="Kısa">Kısa</option>
+              <option value="Normal" selected>Normal</option>
+              <option value="Detaylı">Detaylı</option>
+            </select>
+          </div>
+        </div>
+        <div class="setting-group compact">
+          <label for="selectionMailToInput">Alıcı</label>
+          <input id="selectionMailToInput" class="setting-input" type="email" placeholder="ornek@gmail.com">
+        </div>
+        <div class="setting-group compact">
+          <label for="selectionMailSubjectInput">Konu</label>
+          <input id="selectionMailSubjectInput" class="setting-input" type="text" placeholder="Mail konusu">
+        </div>
+        <div class="setting-group compact">
+          <label for="selectionMailBodyInput">Gövde</label>
+          <textarea id="selectionMailBodyInput" class="setting-input selection-draft-textarea" placeholder="Mail içeriği"></textarea>
+        </div>
+        <div class="editor-actions">
+          <button id="selectionMailGenerateBtn" class="btn-secondary" type="button">Yaz</button>
+          <button id="openSelectionMailDraftBtn" class="btn-primary" type="button">Gmail'de Aç</button>
+          <button id="cancelSelectionMailBtn" class="btn-secondary" type="button">İptal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="selectionCalendarModal" class="modal hidden">
+    <div class="modal-content" style="max-width: 640px;">
+      <div class="modal-header">
+        <h2>Takvim Taslağı</h2>
+        <button class="modal-close" id="closeSelectionCalendarModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="settings-helper-text">Takvim alanları önce boş/yerel varsayılanlarla açılır. Seçili metni modele yalnızca <strong>Yaz</strong> ile gönderir.</p>
+        <div class="provider-grid">
+          <div class="setting-group compact">
+            <label for="selectionCalendarTitleInput">Başlık</label>
+            <input id="selectionCalendarTitleInput" class="setting-input" type="text" placeholder="Etkinlik başlığı">
+          </div>
+          <div class="setting-group compact">
+            <label for="selectionCalendarDateInput">Tarih</label>
+            <input id="selectionCalendarDateInput" class="setting-input" type="date">
+          </div>
+          <div class="setting-group compact">
+            <label for="selectionCalendarStartInput">Başlangıç</label>
+            <input id="selectionCalendarStartInput" class="setting-input" type="time">
+          </div>
+          <div class="setting-group compact">
+            <label for="selectionCalendarEndInput">Bitiş</label>
+            <input id="selectionCalendarEndInput" class="setting-input" type="time">
+          </div>
+        </div>
+        <div class="setting-group compact">
+          <label for="selectionCalendarDetailsInput">Açıklama</label>
+          <textarea id="selectionCalendarDetailsInput" class="setting-input selection-draft-textarea" placeholder="Etkinlik açıklaması"></textarea>
+        </div>
+        <div class="editor-actions">
+          <button id="selectionCalendarGenerateBtn" class="btn-secondary" type="button">Yaz</button>
+          <button id="openSelectionCalendarDraftBtn" class="btn-primary" type="button">Google Takvimde Aç</button>
+          <button id="cancelSelectionCalendarBtn" class="btn-secondary" type="button">İptal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Ayarlar Paneli -->
   <div id="settingsModal" class="modal hidden">
     <div class="modal-content settings-modal-large">
       <div class="modal-header">
-        <h2>⚙️ Ayarlar</h2>
+        <h2>Ayarlar</h2>
         <button class="modal-close" id="closeSettings">&times;</button>
       </div>
       <div class="modal-body">
-        
+        <div class="settings-intro">
+          <p class="settings-kicker">Tercihler</p>
+          <p class="settings-lead">Görünüm, dil ve yerel tercihleri tek merkezden yönetin.</p>
+        </div>
+
         <!-- Görünüm Ayarları -->
         <div class="settings-section">
-          <h3 class="settings-section-title">🎨 Görünüm</h3>
+          <h3 class="settings-section-title" id="appearanceSettingsTitle">Görünüm</h3>
           
           <div class="setting-group">
-            <label>Tema Modu</label>
+            <label id="themeModeLabel">Tema Modu</label>
             <div class="theme-switch-container">
               <button class="theme-switch-btn" id="lightThemeBtn" data-theme="light">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -236,7 +493,7 @@
           </div>
           
         <div class="setting-group">
-          <label>Renk Teması</label>
+          <label id="colorThemeLabel">Renk Teması</label>
           <div class="color-themes">
             <button class="color-theme" data-color="blue" style="background: #2563eb;" title="Mavi"></button>
             <button class="color-theme" data-color="green" style="background: #10b981;" title="Yeşil"></button>
@@ -246,7 +503,7 @@
         </div>
           
         <div class="setting-group">
-            <label>Dil / Language</label>
+            <label id="languageLabel">Dil / Language</label>
           <select id="langSelect" class="setting-select">
               <option value="tr">🇹🇷 Türkçe</option>
               <option value="en">🇬🇧 English</option>
@@ -256,20 +513,226 @@
         
         <!-- Genel Ayarlar -->
         <div class="settings-section">
-          <h3 class="settings-section-title">📋 Genel</h3>
+          <h3 class="settings-section-title" id="generalSettingsTitle">Genel</h3>
           
           <div class="setting-group">
-            <label>Dosya Geçmişi</label>
+            <label id="fileHistoryLabel">Dosya Geçmişi</label>
             <button id="clearHistoryBtn" class="btn-danger-outline">
-              <span class="btn-icon">🗑️</span>
+              <span class="btn-icon">-</span>
               Geçmişi Temizle
             </button>
+          </div>
+        </div>
+
+        <div class="settings-section local-stt-section">
+          <div class="settings-section-heading">
+            <h3 class="settings-section-title">Lokal Ses Tanıma</h3>
+            <button id="localSTTInstallBtn" class="settings-inline-btn primary" type="button">whisper.cpp Kur</button>
+          </div>
+          <p class="settings-helper-text" id="localSTTStatus">Lokal ses tanıma durumu kontrol ediliyor.</p>
+          <div class="edge-note">
+            <h5>whisper.cpp</h5>
+            <p>Türkçe sesli sorular cihazda yazıya çevrilir. Varsayılan model: ggml-small.bin.</p>
+          </div>
+        </div>
+
+        <div class="settings-section ai-settings-section">
+          <div class="settings-section-heading">
+            <h3 class="settings-section-title" id="aiSettingsTitle">AI Sağlayıcıları</h3>
+            <button id="saveAISettingsBtn" class="settings-inline-btn primary" type="button">AI Ayarlarını Kaydet</button>
+          </div>
+
+          <div class="setting-group">
+            <label id="aiProviderLabel" for="aiProviderSelect">Varsayılan Sağlayıcı</label>
+            <select id="aiProviderSelect" class="setting-select">
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="gemini">Gemini</option>
+              <option value="ollama">Ollama</option>
+            </select>
+          </div>
+
+          <p class="settings-helper-text" id="aiSettingsStatus">AI ayarları henüz yüklenmedi.</p>
+
+          <div class="provider-stack">
+            <section class="provider-card" data-provider="openai">
+              <div class="provider-card-header">
+                <h4>OpenAI</h4>
+                <div class="provider-actions">
+                  <button class="settings-inline-btn" type="button" id="openaiRefreshModelsBtn">Modelleri Yenile</button>
+                  <button class="settings-inline-btn" type="button" id="openaiTestBtn">Bağlantıyı Test Et</button>
+                </div>
+              </div>
+              <p class="provider-status" id="openaiProviderStatus">Hazır.</p>
+              <div class="provider-grid">
+                <div class="setting-group compact">
+                  <label for="openaiApiKey" id="openaiApiKeyLabel">API Key</label>
+                  <input id="openaiApiKey" class="setting-input" type="password" placeholder="sk-..." autocomplete="off">
+                  <p class="settings-helper-text" id="openaiApiKeyHint">Kayıtlı anahtar yok.</p>
+                </div>
+                <div class="setting-group compact">
+                  <label for="openaiBaseUrl" id="openaiBaseUrlLabel">Base URL</label>
+                  <input id="openaiBaseUrl" class="setting-input" type="text" placeholder="https://api.openai.com/v1">
+                </div>
+                <div class="setting-group compact">
+                  <label for="openaiTextModel" id="openaiTextModelLabel">Metin Modeli</label>
+                  <select id="openaiTextModel" class="setting-select"></select>
+                </div>
+                <div class="setting-group compact">
+                  <label for="openaiVisionModel" id="openaiVisionModelLabel">Görsel Modeli</label>
+                  <select id="openaiVisionModel" class="setting-select"></select>
+                </div>
+              </div>
+              <button class="settings-text-btn" type="button" id="openaiClearKeyBtn">Kayıtlı anahtarı temizle</button>
+            </section>
+
+            <section class="provider-card" data-provider="anthropic">
+              <div class="provider-card-header">
+                <h4>Anthropic</h4>
+                <div class="provider-actions">
+                  <button class="settings-inline-btn" type="button" id="anthropicRefreshModelsBtn">Modelleri Yenile</button>
+                  <button class="settings-inline-btn" type="button" id="anthropicTestBtn">Bağlantıyı Test Et</button>
+                </div>
+              </div>
+              <p class="provider-status" id="anthropicProviderStatus">Hazır.</p>
+              <div class="provider-grid">
+                <div class="setting-group compact">
+                  <label for="anthropicApiKey" id="anthropicApiKeyLabel">API Key</label>
+                  <input id="anthropicApiKey" class="setting-input" type="password" placeholder="sk-ant-..." autocomplete="off">
+                  <p class="settings-helper-text" id="anthropicApiKeyHint">Kayıtlı anahtar yok.</p>
+                </div>
+                <div class="setting-group compact">
+                  <label for="anthropicBaseUrl" id="anthropicBaseUrlLabel">Base URL</label>
+                  <input id="anthropicBaseUrl" class="setting-input" type="text" placeholder="https://api.anthropic.com/v1">
+                </div>
+                <div class="setting-group compact">
+                  <label for="anthropicTextModel" id="anthropicTextModelLabel">Metin Modeli</label>
+                  <select id="anthropicTextModel" class="setting-select"></select>
+                </div>
+                <div class="setting-group compact">
+                  <label for="anthropicVisionModel" id="anthropicVisionModelLabel">Görsel Modeli</label>
+                  <select id="anthropicVisionModel" class="setting-select"></select>
+                </div>
+              </div>
+              <button class="settings-text-btn" type="button" id="anthropicClearKeyBtn">Kayıtlı anahtarı temizle</button>
+            </section>
+
+            <section class="provider-card" data-provider="openrouter">
+              <div class="provider-card-header">
+                <h4>OpenRouter</h4>
+                <div class="provider-actions">
+                  <button class="settings-inline-btn" type="button" id="openrouterRefreshModelsBtn">Modelleri Yenile</button>
+                  <button class="settings-inline-btn" type="button" id="openrouterTestBtn">Bağlantıyı Test Et</button>
+                </div>
+              </div>
+              <p class="provider-status" id="openrouterProviderStatus">Hazır.</p>
+              <div class="provider-grid">
+                <div class="setting-group compact">
+                  <label for="openrouterApiKey" id="openrouterApiKeyLabel">API Key</label>
+                  <input id="openrouterApiKey" class="setting-input" type="password" placeholder="sk-or-..." autocomplete="off">
+                  <p class="settings-helper-text" id="openrouterApiKeyHint">Kayıtlı anahtar yok.</p>
+                </div>
+                <div class="setting-group compact">
+                  <label for="openrouterBaseUrl" id="openrouterBaseUrlLabel">Base URL</label>
+                  <input id="openrouterBaseUrl" class="setting-input" type="text" placeholder="https://openrouter.ai/api/v1">
+                  <p class="settings-helper-text" id="openrouterBaseUrlHint">Normalde değiştirme. OpenRouter için varsayılan adres budur.</p>
+                </div>
+                <div class="setting-group compact">
+                  <label for="openrouterTextModel" id="openrouterTextModelLabel">Metin Modeli</label>
+                  <select id="openrouterTextModel" class="setting-select"></select>
+                </div>
+                <div class="setting-group compact">
+                  <label for="openrouterVisionModel" id="openrouterVisionModelLabel">Görsel Modeli</label>
+                  <select id="openrouterVisionModel" class="setting-select"></select>
+                </div>
+                <div class="setting-group compact">
+                  <label for="openrouterCustomTextModel" id="openrouterCustomTextModelLabel">Metin Model ID</label>
+                  <input id="openrouterCustomTextModel" class="setting-input" type="text" placeholder="Örn: openai/gpt-5.2">
+                </div>
+                <div class="setting-group compact">
+                  <label for="openrouterCustomVisionModel" id="openrouterCustomVisionModelLabel">Görsel Model ID</label>
+                  <input id="openrouterCustomVisionModel" class="setting-input" type="text" placeholder="Örn: google/gemini-2.5-pro">
+                </div>
+              </div>
+              <button class="settings-text-btn" type="button" id="openrouterClearKeyBtn">Kayıtlı anahtarı temizle</button>
+            </section>
+
+            <section class="provider-card" data-provider="gemini">
+              <div class="provider-card-header">
+                <h4>Gemini</h4>
+                <div class="provider-actions">
+                  <button class="settings-inline-btn" type="button" id="geminiRefreshModelsBtn">Modelleri Yenile</button>
+                  <button class="settings-inline-btn" type="button" id="geminiTestBtn">Bağlantıyı Test Et</button>
+                </div>
+              </div>
+              <p class="provider-status" id="geminiProviderStatus">Hazır.</p>
+              <div class="provider-grid">
+                <div class="setting-group compact">
+                  <label for="geminiApiKey" id="geminiApiKeyLabel">API Key</label>
+                  <input id="geminiApiKey" class="setting-input" type="password" placeholder="AIza..." autocomplete="off">
+                  <p class="settings-helper-text" id="geminiApiKeyHint">Kayıtlı anahtar yok.</p>
+                </div>
+                <div class="setting-group compact">
+                  <label for="geminiBaseUrl" id="geminiBaseUrlLabel">Base URL</label>
+                  <input id="geminiBaseUrl" class="setting-input" type="text" placeholder="https://generativelanguage.googleapis.com/v1beta/openai">
+                </div>
+                <div class="setting-group compact">
+                  <label for="geminiTextModel" id="geminiTextModelLabel">Metin Modeli</label>
+                  <select id="geminiTextModel" class="setting-select"></select>
+                </div>
+                <div class="setting-group compact">
+                  <label for="geminiVisionModel" id="geminiVisionModelLabel">Görsel Modeli</label>
+                  <select id="geminiVisionModel" class="setting-select"></select>
+                </div>
+              </div>
+              <button class="settings-text-btn" type="button" id="geminiClearKeyBtn">Kayıtlı anahtarı temizle</button>
+            </section>
+
+            <section class="provider-card" data-provider="ollama">
+              <div class="provider-card-header">
+                <h4>Ollama</h4>
+                <div class="provider-actions">
+                  <button class="settings-inline-btn" type="button" id="ollamaRefreshModelsBtn">Modelleri Yenile</button>
+                  <button class="settings-inline-btn" type="button" id="ollamaTestBtn">Bağlantıyı Test Et</button>
+                </div>
+              </div>
+              <p class="provider-status" id="ollamaProviderStatus">Hazır.</p>
+              <div class="provider-grid">
+                <div class="setting-group compact">
+                  <label for="ollamaBaseUrl" id="ollamaBaseUrlLabel">Base URL</label>
+                  <input id="ollamaBaseUrl" class="setting-input" type="text" placeholder="http://localhost:11434">
+                </div>
+                <div class="setting-group compact">
+                  <label for="ollamaApiKey" id="ollamaApiKeyLabel">API Key (Opsiyonel)</label>
+                  <input id="ollamaApiKey" class="setting-input" type="password" placeholder="ollama cloud için" autocomplete="off">
+                  <p class="settings-helper-text" id="ollamaApiKeyHint">Yerel Ollama için anahtar gerekmez.</p>
+                </div>
+                <div class="setting-group compact">
+                  <label for="ollamaTextModel" id="ollamaTextModelLabel">Metin Modeli</label>
+                  <select id="ollamaTextModel" class="setting-select"></select>
+                </div>
+                <div class="setting-group compact">
+                  <label for="ollamaVisionModel" id="ollamaVisionModelLabel">Görsel Modeli</label>
+                  <select id="ollamaVisionModel" class="setting-select"></select>
+                </div>
+              </div>
+              <div class="provider-pull-row">
+                <input id="ollamaPullModelInput" class="setting-input" type="text" placeholder="Örn: gemma4">
+                <button class="settings-inline-btn" type="button" id="ollamaPullModelBtn">Model İndir</button>
+              </div>
+              <button class="settings-text-btn" type="button" id="ollamaClearKeyBtn">Kayıtlı anahtarı temizle</button>
+              <div class="edge-note">
+                <h5 id="googleEdgeTitle">Google AI Edge / Gemma 4</h5>
+                <p id="googleEdgeDescription">Google AI Edge, ayrı bir on-device runtime ister. Bu sürümde çalışma yolu Ollama + gemma4 olarak bağlı.</p>
+              </div>
+            </section>
           </div>
         </div>
         
         <!-- Hakkında -->
         <div class="settings-section">
-          <h3 class="settings-section-title">ℹ️ Hakkında</h3>
+          <h3 class="settings-section-title" id="aboutSettingsTitle">Hakkında</h3>
           
           <div class="about-info">
             <div class="about-logo">
@@ -277,7 +740,10 @@
                 <div class="doc-mini">
                   <div class="doc-mini-fold"></div>
                 </div>
-                <span class="eye-mini">👁️</span>
+                <svg class="eye-mini" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                  <circle cx="12" cy="12" r="2.8"></circle>
+                </svg>
               </div>
             </div>
             <h4>FilePeek AI</h4>
@@ -295,11 +761,15 @@
   <div id="wordEditorModal" class="modal hidden">
     <div class="modal-content editor-modal">
       <div class="modal-header">
-        <h2>📝 Word Düzenle</h2>
+        <h2>Word Düzenle</h2>
         <button class="modal-close" id="closeWordEditor">&times;</button>
       </div>
       <div class="modal-body">
         <div class="editor-toolbar">
+              <label class="sheet-switcher" title="Sayfa Seç">
+            <span>Sayfa</span>
+            <select id="excelSheetSelect" class="sheet-select"></select>
+          </label>
           <button class="toolbar-btn" id="boldBtn" title="Kalın"><b>B</b></button>
           <button class="toolbar-btn" id="italicBtn" title="İtalik"><i>I</i></button>
           <button class="toolbar-btn" id="underlineBtn" title="Altı Çizili"><u>U</u></button>
@@ -311,12 +781,12 @@
             <option value="h3">Başlık 3</option>
           </select>
           <div class="toolbar-divider"></div>
-          <button class="toolbar-btn" id="listBtn" title="Liste">• Liste</button>
+          <button class="toolbar-btn" id="listBtn" title="Liste">Liste</button>
         </div>
         <div id="wordEditorContent" class="word-editor" contenteditable="true"></div>
         <div class="editor-actions">
-          <button id="saveWordBtn" class="btn-primary">💾 Kaydet</button>
-          <button id="saveWordAsBtn" class="btn-secondary">💾 Farklı Kaydet</button>
+          <button id="saveWordBtn" class="btn-primary">Kaydet</button>
+          <button id="saveWordAsBtn" class="btn-secondary">Farklı Kaydet</button>
           <button id="cancelWordBtn" class="btn-secondary">İptal</button>
         </div>
       </div>
@@ -327,8 +797,18 @@
   <div id="excelEditorModal" class="modal hidden">
     <div class="modal-content editor-modal excel-editor-modal">
       <div class="modal-header">
-        <h2>📊 Excel Düzenle</h2>
-        <button class="modal-close" id="closeExcelEditor">&times;</button>
+        <h2>Excel Düzenle</h2>
+        <div class="modal-header-actions">
+          <button class="modal-header-btn" id="excelFullscreenBtn" title="Tam ekran">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 3H3v5"></path>
+              <path d="M16 3h5v5"></path>
+              <path d="M21 16v5h-5"></path>
+              <path d="M8 21H3v-5"></path>
+            </svg>
+          </button>
+          <button class="modal-close" id="closeExcelEditor">&times;</button>
+        </div>
       </div>
       <div class="modal-body">
         <!-- Formül Çubuğu -->
@@ -351,18 +831,18 @@
           <div class="toolbar-divider"></div>
           
           <!-- Hizalama -->
-          <button class="toolbar-btn" id="alignLeftBtn" title="Sola Hizala">⬅</button>
-          <button class="toolbar-btn" id="alignCenterBtn" title="Ortala">↔</button>
-          <button class="toolbar-btn" id="alignRightBtn" title="Sağa Hizala">➡</button>
+          <button class="toolbar-btn" id="alignLeftBtn" title="Sola Hizala">Sol</button>
+          <button class="toolbar-btn" id="alignCenterBtn" title="Ortala">Orta</button>
+          <button class="toolbar-btn" id="alignRightBtn" title="Sağa Hizala">Sağ</button>
           <div class="toolbar-divider"></div>
           
           <!-- Renkler -->
           <label class="toolbar-color-btn" title="Hücre Rengi">
-            🎨 Arka Plan
+            Arka Plan
             <input type="color" id="bgColorPicker" value="#ffffff" />
           </label>
           <label class="toolbar-color-btn" title="Metin Rengi">
-            🖍️ Metin
+            Metin
             <input type="color" id="textColorPicker" value="#000000" />
           </label>
           <div class="toolbar-divider"></div>
@@ -371,14 +851,20 @@
         </div>
         <div id="excelEditorContent" class="excel-editor-container"></div>
         <div class="editor-actions">
-          <button id="saveExcelBtn" class="btn-primary">💾 Kaydet</button>
-          <button id="saveExcelAsBtn" class="btn-secondary">💾 Farklı Kaydet</button>
+          <button id="saveExcelBtn" class="btn-primary">Kaydet</button>
+          <button id="saveExcelAsBtn" class="btn-secondary">Farklı Kaydet</button>
           <button id="cancelExcelBtn" class="btn-secondary">İptal</button>
         </div>
       </div>
     </div>
   </div>
 
+  <script src="tab-state.js"></script>
+  <script src="preview-model.js"></script>
+  <script src="file-actions.js"></script>
+  <script src="excel-formulas.js"></script>
+  <script src="excel-search.js"></script>
+  <script src="excel-virtualization.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

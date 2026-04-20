@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 // Renderer process için güvenli API'yi dışa aktar
 contextBridge.exposeInMainWorld("kankaAPI", {
@@ -10,12 +10,24 @@ contextBridge.exposeInMainWorld("kankaAPI", {
   
   // Dosya içeriğini okuma
   peekFile: (filePath) => ipcRenderer.invoke("peek-file", filePath),
+  authorizeRecentFile: (filePath) => ipcRenderer.invoke("authorize-recent-file", filePath),
+  getDroppedFilePath: (file) => {
+    try {
+      const filePath = webUtils.getPathForFile(file);
+      return ipcRenderer.invoke("authorize-dropped-file-path", filePath);
+    } catch (_error) {
+      return null;
+    }
+  },
   
   // AI özetleme
   aiSummary: (text) => ipcRenderer.invoke("ai-summary", text),
   
   // AI soru-cevap
   aiQuestion: (text, question) => ipcRenderer.invoke("ai-question", text, question),
+  aiTranscribeAudio: (base64Audio, mimeType) => ipcRenderer.invoke("ai-transcribe-audio", base64Audio, mimeType),
+  getLocalSTTStatus: () => ipcRenderer.invoke("local-stt-status"),
+  installLocalSTT: () => ipcRenderer.invoke("local-stt-install"),
   
   // AI resim analizi
   aiAnalyzeImage: (base64Data, mimeType) => ipcRenderer.invoke("ai-analyze-image", base64Data, mimeType),
@@ -23,6 +35,13 @@ contextBridge.exposeInMainWorld("kankaAPI", {
   
   // AI resim soru-cevap
   aiImageQuestion: (base64Data, mimeType, question) => ipcRenderer.invoke("ai-image-question", base64Data, mimeType, question),
+
+  // AI sağlayıcı ayarları
+  getAISettings: () => ipcRenderer.invoke("ai-settings-get"),
+  saveAISettings: (payload) => ipcRenderer.invoke("ai-settings-save", payload),
+  listAIModels: (providerId, overrides) => ipcRenderer.invoke("ai-models-list", providerId, overrides),
+  testAIProvider: (providerId, overrides) => ipcRenderer.invoke("ai-provider-test", providerId, overrides),
+  pullOllamaModel: (payload) => ipcRenderer.invoke("ollama-pull-model", payload),
   
   // Dosya yolu dinleyici (sağ tıkla aç için)
   onOpenFile: (callback) => {
@@ -48,5 +67,6 @@ contextBridge.exposeInMainWorld("kankaAPI", {
   saveExcel: (filePath, data) => ipcRenderer.invoke("save-excel", filePath, data),
   
   // Farklı kaydet dialogu
-  showSaveDialog: (defaultPath, filters) => ipcRenderer.invoke("save-file-dialog", defaultPath, filters)
+  showSaveDialog: (defaultPath, filters) => ipcRenderer.invoke("save-file-dialog", defaultPath, filters),
+  openExternalUrl: (url) => ipcRenderer.invoke("open-external-url", url)
 });

@@ -8,6 +8,8 @@ if (!API_KEY) {
 }
 
 const genAI = API_KEY ? new GoogleGenerativeAI(API_KEY) : null;
+const MAX_TEXT_CONTEXT_CHARS = 100000;
+const MAX_EXCEL_CONTEXT_CHARS = 500000;
 
 /**
  * Dosya içeriğini özetler (Excel için tüm sayfalar dahil)
@@ -94,11 +96,27 @@ async function askQuestion(text, question) {
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     
     // Excel mi kontrol et
-    const isExcel = text.includes("=== SAYFA");
+    const isExcel = text.includes("=== SAYFA") || text.includes("=== EŞLEŞME SONUÇLARI ===");
+    const isFocusedExcelContext = text.includes("=== EŞLEŞME SONUÇLARI ===");
+    const contextLimit = isExcel ? MAX_EXCEL_CONTEXT_CHARS : MAX_TEXT_CONTEXT_CHARS;
+    const truncatedText = text.slice(0, contextLimit);
     
-    // TÜM dosyayı analiz et (100.000 karaktere kadar)
     const prompt = isExcel
-      ? `Sen bir Excel veri analiz uzmanısın. Aşağıdaki Excel dosyasının TÜM SAYFALARINI detaylı şekilde tarayarak soruyu cevapla.
+      ? isFocusedExcelContext
+        ? `Sen bir Excel veri analiz uzmanısın. Uygulama tarafı eşleşen satırları JS ile önceden buldu.
+Sana sadece eşleşen satır ve yakın bağlam gönderiliyor. Sadece bu bağlamdaki verilere dayanarak cevap ver.
+
+KURALLAR:
+- Cevabı kısa ve net ver.
+- Satırdaki alan adlarını doğru kullan.
+- Bilgi bağlamda yoksa "Bu bilgi bulunan satır bağlamında görünmüyor" de.
+- Tahmin yapma.
+
+SORU: ${question}
+
+EŞLEŞEN SATIR VE YAKIN BAĞLAM:
+${truncatedText}`
+        : `Sen bir Excel veri analiz uzmanısın. Aşağıdaki Excel dosyasının TÜM SAYFALARINI detaylı şekilde tarayarak soruyu cevapla.
 
 🔍 GELİŞMİŞ EXCEL ARAMA KURALLARI:
 
@@ -144,14 +162,14 @@ async function askQuestion(text, question) {
 SORU: ${question}
 
 EXCEL DOSYASI (TÜM SAYFALAR):
-${text.slice(0, 100000)}`
+${truncatedText}`
       : `Aşağıdaki belgenin TAMAMINI analiz ederek soruyu Türkçe olarak cevapla.
 Belgede geçen bilgilere göre detaylı cevap ver. Eğer belgede yoksa "Bu bilgi belgede bulunmuyor" de.
 
 SORU: ${question}
 
 BELGE TAMAMI:
-${text.slice(0, 100000)}`;
+${truncatedText}`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
