@@ -33,6 +33,8 @@ test("landing page describes model selection and OpenRouter integration", () => 
 
   assert.match(landing, /Model Seçimi/);
   assert.match(landing, /OpenRouter/);
+  assert.match(landing, /Yerel Modeller/);
+  assert.match(landing, /Ollama/);
   assert.match(landing, /Gemini/);
   assert.match(landing, /OpenAI/);
   assert.match(landing, /Anthropic/);
