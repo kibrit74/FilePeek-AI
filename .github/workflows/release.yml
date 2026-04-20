@@ -40,6 +40,7 @@ jobs:
         with:
           name: FilePeek AI ${{ github.ref_name }}
           generate_release_notes: true
+          overwrite_files: true
           files: |
             dist/FilePeek AI Setup 1.0.0.exe
             dist/FilePeek AI Setup 1.0.0.exe.blockmap

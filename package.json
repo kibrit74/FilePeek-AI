@@ -8,10 +8,10 @@
     "dev:electron": "start landing-page.html && electron .",
     "test": "node --test test/*.test.js",
     "build": "electron-builder",
-    "dist:dir": "electron-builder --win --x64 --dir",
-    "dist": "electron-builder --win --x64",
-    "dist:win": "electron-builder --win --x64",
-    "dist:portable": "electron-builder --win portable",
+    "dist:dir": "set ELECTRON_BUILDER_DISABLE_BUILD_CACHE=true&& electron-builder --win --x64 --dir",
+    "dist": "set ELECTRON_BUILDER_DISABLE_BUILD_CACHE=true&& electron-builder --win --x64",
+    "dist:win": "set ELECTRON_BUILDER_DISABLE_BUILD_CACHE=true&& electron-builder --win --x64",
+    "dist:portable": "set ELECTRON_BUILDER_DISABLE_BUILD_CACHE=true&& electron-builder --win portable",
     "register:context-menu": "powershell -ExecutionPolicy Bypass -File scripts/register-context-menu.ps1"
   },
   "keywords": [
@@ -38,10 +38,11 @@
     "electron": "^41.2.1",
     "electron-builder": "^26.8.1"
   },
-  "build": {
+    "build": {
     "appId": "com.filepeek.ai",
     "productName": "FilePeek AI",
     "compression": "store",
+    "afterPack": "build/after-pack.js",
     "files": [
       "src/**/*",
       "package.json"
@@ -118,11 +119,16 @@
       "target": [
         "nsis"
       ],
+      "signExts": [
+        "!exe"
+      ],
       "signAndEditExecutable": false,
-      "icon": "build/icon.png"
+      "icon": "build/icon.ico"
     },
     "nsis": {
-      "include": "build/installer.nsh"
+      "include": "build/installer.nsh",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     },
     "mac": {
       "icon": "build/icon.png"
