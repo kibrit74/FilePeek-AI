@@ -18,7 +18,7 @@ test("windows installer registers FilePeek AI explorer context menu for supporte
 
   assert.match(installer, /Software\\Classes\\SystemFileAssociations\\\$\{EXT\}\\shell\\FilePeekAI/);
 
-  for (const extension of [".pdf", ".docx", ".xlsx", ".txt", ".zip", ".udf", ".jpg", ".png", ".gif"]) {
+  for (const extension of [".pdf", ".docx", ".xlsx", ".txt", ".md", ".zip", ".udf", ".jpg", ".png", ".gif"]) {
     assert.match(installer, new RegExp(`!insertmacro RegisterFilePeekContextMenu "\\${extension}"`));
     assert.match(installer, new RegExp(`!insertmacro UnregisterFilePeekContextMenu "\\${extension}"`));
   }

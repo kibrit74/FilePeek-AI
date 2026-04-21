@@ -1287,6 +1287,41 @@ function formatFileSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+function renderZipEntryIcon(isFolder) {
+  if (isFolder) {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z"></path></svg>`;
+  }
+
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z"></path><path d="M14 3v5h4M9 12h6M9 15h6M9 18h4"></path></svg>`;
+}
+
+function renderZipTree(entries = [], limit = 300) {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return `<p class="zip-empty">Arşiv boş görünüyor.</p>`;
+  }
+
+  const visibleEntries = entries.slice(0, limit);
+  return `
+    <ul class="zip-tree">
+      ${visibleEntries.map(entry => {
+        const depth = Math.max(0, Number(entry.depth || 0));
+        const sizeLabel = entry.isFolder ? "" : formatFileSize(entry.size);
+        const displayName = entry.displayName || entry.name || entry.path || "Dosya";
+        const pathLabel = entry.path || entry.name || displayName;
+
+        return `
+          <li class="zip-tree-item ${entry.isFolder ? "is-folder" : "is-file"}" style="--zip-depth: ${depth};" title="${escapeAttribute(pathLabel)}">
+            <span class="zip-tree-icon">${renderZipEntryIcon(entry.isFolder)}</span>
+            <span class="zip-tree-name">${escapeHtml(displayName)}</span>
+            <span class="zip-tree-path">${escapeHtml(pathLabel)}</span>
+            ${sizeLabel ? `<span class="zip-tree-size">${escapeHtml(sizeLabel)}</span>` : ""}
+          </li>
+        `;
+      }).join("")}
+    </ul>
+  `;
+}
+
 function formatTimeAgo(timestamp) {
   const now = Date.now();
   const diff = now - timestamp;
@@ -1633,21 +1668,16 @@ function displayFile(data, keepAIResult = false, skipHistory = false) {
           <div class="preview-header">
             <div class="preview-icon txt-icon">ZIP</div>
             <div class="preview-meta">
-              <h3>ZIP Arsivi</h3>
+              <h3>ZIP Arşivi</h3>
               <div class="preview-stats">
-                <span class="stat-badge">${data.totalFiles} oge</span>
+                <span class="stat-badge">${data.totalFiles} öğe</span>
               </div>
             </div>
           </div>
           <div class="preview-content">
-            <ul class="zip-list">`;
-      data.entries.slice(0, 50).forEach(entry => {
-        const icon = entry.isFolder ? "[DIR]" : "[FILE]";
-        previewHtml += `<li>${icon} ${escapeHtml(entry.name)}</li>`;
-      });
-      previewHtml += "</ul>";
-      if (data.totalFiles > 50) {
-        previewHtml += `<p>... ve ${data.totalFiles - 50} dosya daha</p>`;
+            ${renderZipTree(data.entries || [], 300)}`;
+      if (data.totalFiles > 300) {
+        previewHtml += `<p class="zip-more">... ve ${data.totalFiles - 300} öğe daha</p>`;
       }
       previewHtml += `
             <div class="content-text" style="margin-top: 16px;">${escapeHtml(previewText)}</div>
@@ -1657,6 +1687,7 @@ function displayFile(data, keepAIResult = false, skipHistory = false) {
       
     case "text":
       const txtSizeMB = data.size ? (data.size / 1024 / 1024).toFixed(2) : "?";
+      const textTitle = data.type === "md" ? "Markdown Dosyası" : "Metin Dosyası";
       previewHtml = `
         <div class="file-preview-card">
           <div class="preview-header">
@@ -1672,7 +1703,7 @@ function displayFile(data, keepAIResult = false, skipHistory = false) {
               </svg>
             </div>
             <div class="preview-meta">
-              <h3>Metin Dosyası</h3>
+              <h3>${textTitle}</h3>
               <div class="preview-stats">
                 <span class="stat-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg> ${txtSizeMB} MB</span>
               </div>

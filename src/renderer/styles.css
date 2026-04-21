@@ -1573,27 +1573,89 @@ table td {
   color: var(--text-secondary);
 }
 
-/* ===== ZIP LIST ===== */
-.zip-list {
+/* ===== ZIP TREE ===== */
+.zip-tree {
   list-style: none;
   padding: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
-.zip-list li {
-  padding: 10px 12px;
+.zip-tree-item {
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 24px minmax(140px, 1fr) minmax(120px, 1.6fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px 9px calc(12px + (var(--zip-depth, 0) * 18px));
   border-bottom: 1px solid var(--border);
-  font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   color: var(--text-secondary);
   transition: var(--transition);
 }
 
-.zip-list li:hover {
+.zip-tree-item:hover {
   background: var(--bg-secondary);
 }
 
-.zip-list li:last-child {
+.zip-tree-item:last-child {
   border-bottom: none;
+}
+
+.zip-tree-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+}
+
+.zip-tree-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+
+.zip-tree-item.is-folder .zip-tree-icon svg {
+  fill: rgba(37, 99, 235, 0.1);
+}
+
+.zip-tree-name {
+  min-width: 0;
+  color: var(--text-primary);
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zip-tree-path {
+  min-width: 0;
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zip-tree-size {
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.zip-more,
+.zip-empty {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 /* ===== SCROLLBAR ===== */

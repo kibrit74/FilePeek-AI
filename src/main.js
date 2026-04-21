@@ -51,6 +51,20 @@ let queuedFileToOpen = null;
 let previewTransitioning = false;
 const shouldAutoOpenDevTools = process.env.FILEPEEK_DEBUG === "1" || process.env.ELECTRON_DEBUG === "1";
 
+function getAppIconPath() {
+  const candidates = app.isPackaged
+    ? [
+        path.join(process.resourcesPath, "build", "icon.png"),
+        path.join(process.resourcesPath, "build", "icon.ico"),
+      ]
+    : [
+        path.join(__dirname, "..", "build", "icon.png"),
+        path.join(__dirname, "..", "build", "icon.ico"),
+      ];
+
+  return candidates.find(candidate => fs.existsSync(candidate));
+}
+
 const aiSettingsStore = createAISettingsStore({
   filePath: path.join(app.getPath("userData"), "ai-settings.json"),
   safeStorage,
@@ -138,7 +152,7 @@ function createWindow(show = true) {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    icon: path.join(__dirname, "../build/icon.png"),
+    icon: getAppIconPath(),
   });
 
   configureMediaPermissions(mainWindow);
@@ -188,7 +202,7 @@ function createPreviewWindow(filePath) {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    icon: path.join(__dirname, "../build/icon.png"),
+    icon: getAppIconPath(),
   });
 
   previewWindow.on("closed", () => {
@@ -440,11 +454,24 @@ ipcMain.handle("peek-file", async (_event, filePath) => {
       const entries = [];
       
       zip.forEach((relativePath, file) => {
+        const normalizedPath = String(relativePath || "").replace(/\\/g, "/");
+        const parts = normalizedPath.split("/").filter(Boolean);
+        const displayName = parts[parts.length - 1] || normalizedPath;
+
         entries.push({
-          name: relativePath,
+          name: normalizedPath,
+          path: normalizedPath,
+          displayName,
+          parentPath: parts.slice(0, -1).join("/"),
+          depth: Math.max(parts.length - 1, 0),
           isFolder: file.dir,
           size: file._data ? file._data.uncompressedSize : 0
         });
+      });
+
+      entries.sort((a, b) => {
+        if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+        return a.path.localeCompare(b.path, "tr", { sensitivity: "base" });
       });
 
       result.type = "zip";
@@ -534,7 +561,7 @@ ipcMain.handle("peek-file", async (_event, filePath) => {
     // Metin dosyası
     else {
       const text = buffer.toString("utf8");
-      result.type = "text";
+      result.type = ext === "md" ? "md" : "text";
       result.sample = text.slice(0, 1500);
       result.fullText = text;
     }

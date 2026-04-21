@@ -47,6 +47,16 @@
       "src/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "build",
+        "to": "build",
+        "filter": [
+          "icon.png",
+          "icon.ico"
+        ]
+      }
+    ],
     "directories": {
       "output": "dist"
     },
@@ -72,6 +82,11 @@
       {
         "ext": "txt",
         "name": "Text File",
+        "role": "Viewer"
+      },
+      {
+        "ext": "md",
+        "name": "Markdown Document",
         "role": "Viewer"
       },
       {
